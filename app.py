@@ -27,7 +27,9 @@ with st.form("activity_form", clear_on_submit=True):
   caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
   note = st.text_area("Note / Details")
 
-    if submitted:
+  submitted = st.form_submit_button("Save Entry")
+
+  if submitted:
     now_utc = datetime.now()
     data = {
         "type": activity_type,
@@ -44,6 +46,9 @@ with st.form("activity_form", clear_on_submit=True):
       # This will print the raw database error on your screen so we can see the exact cause
       st.error(f"Detailed Database Error: {e}")
 
+# Timeline View
+st.divider()
+st.subheader("Activity Timeline")
 
 try:
   response = (
@@ -74,3 +79,4 @@ try:
     st.info("No logs found.")
 except Exception as e:
   st.error(f"Error loading logs: {e}")
+    
