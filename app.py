@@ -9,6 +9,94 @@ st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
+# --- CUSTOM BRIGHT LIGHT THEME CSS ---
+st.markdown("""
+    <style>
+    /* Main background & text color */
+    .stApp {
+        background-color: #F8F9FA;
+        color: #2D3748;
+    }
+    
+    /* Headers */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1A365D !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Cards / Containers styling */
+    div.stMarkdown {
+        color: #2D3748;
+    }
+
+    /* Buttons styling */
+    .stButton>button {
+        background-color: #4299E1;
+        color: white;
+        border-radius: 12px;
+        border: none;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        box-shadow: 0 2px 4px rgba(66, 153, 225, 0.2);
+    }
+    .stButton>button:hover {
+        background-color: #3182CE;
+        color: white;
+    }
+
+    /* Form submit buttons */
+    .stFormSubmitButton>button {
+        background-color: #48BB78;
+        color: white;
+        border-radius: 12px;
+        border: none;
+        font-weight: 600;
+        width: 100%;
+    }
+    .stFormSubmitButton>button:hover {
+        background-color: #38A169;
+        color: white;
+    }
+
+    /* Input Fields */
+    input, textarea, select {
+        border-radius: 8px !important;
+        border: 1px solid #E2E8F0 !important;
+        background-color: #FFFFFF !important;
+    }
+
+    /* Metric cards */
+    div[data-testid="stMetric"] {
+        background-color: #FFFFFF;
+        padding: 15px;
+        border-radius: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border: 1px solid #EDF2F7;
+    }
+    div[data-testid="stMetric"] label {
+        color: #718096 !important;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #2B6CB0 !important;
+    }
+
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #EDF2F7;
+        border-radius: 8px;
+        color: #4A5568;
+        padding: 8px 16px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #4299E1 !important;
+        color: white !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 
 # Initialize Supabase Connection
 @st.cache_resource
