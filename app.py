@@ -63,6 +63,10 @@ supabase = init_supabase()
 if "user" not in st.session_state:
     st.session_state.user = None
 
+# Default active caregiver profile
+if "current_caregiver" not in st.session_state:
+    st.session_state.current_caregiver = "Albert"
+
 try:
     session = supabase.auth.get_session()
     if session and session.user:
@@ -104,11 +108,26 @@ if not st.session_state.user:
 else:
     # --- MAIN APP ---
     user_email = st.session_state.user.email
-    default_caregiver = user_email.split("@")[0].capitalize()
-    caregiver_options = [default_caregiver, "Partner", "Nanny"]
 
     with st.sidebar:
         st.write(f"Signed in as:\n**{user_email}**")
+        st.divider()
+        
+        # --- CAREGIVER SELECTOR / CUSTOMIZER ---
+        st.subheader("👤 Active Caregiver")
+        available_caregivers = ["Albert", "Partner", "Nanny", "Custom..."]
+        selected_cg_option = st.selectbox("Who is logging right now?", available_caregivers, index=available_caregivers.index(st.session_state.current_caregiver) if st.session_state.current_caregiver in available_caregivers else 3)
+        
+        if selected_cg_option == "Custom...":
+            custom_name = st.text_input("Enter your preferred name:", value=st.session_state.current_caregiver)
+            if custom_name:
+                st.session_state.current_caregiver = custom_name
+        else:
+            st.session_state.current_caregiver = selected_cg_option
+            
+        st.info(f"Current logs will be saved under: **{st.session_state.current_caregiver}**")
+        
+        st.divider()
         if st.button("Log Out", use_container_width=True):
             try: supabase.auth.sign_out()
             except: pass
@@ -116,6 +135,7 @@ else:
             st.rerun()
 
     st.title("🍼 Smart Baby")
+    st.caption(f"Welcome back, **{st.session_state.current_caregiver}**! Tracking live for baby.")
 
     # --- TODAY'S SUMMARY METRICS ---
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -146,33 +166,33 @@ else:
 
         action = st.radio("Select Activity", ["Feed", "Sleep", "Diaper", "Note"], horizontal=True)
 
-        def save_log(act_type, note_text, caregiver, start_time=None):
+        def save_log(act_type, note_text, start_time=None):
             data = {
                 "type": act_type,
-                "created_by_caregiver": caregiver,
+                "created_by_caregiver": st.session_state.current_caregiver,
                 "note": note_text,
                 "start_date_time": (start_time or datetime.now()).isoformat()
             }
             try:
                 supabase.schema("public").table("baby_logs").insert(data).execute()
-                st.success(f"{act_type} saved successfully!")
+                st.success(f"{act_type} saved by {st.session_state.current_caregiver}!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
         if action == "Feed":
             with st.form("feed_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", caregiver_options)
+                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
                 ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
                 amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
                 note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
                 if st.form_submit_button("Save Feed"):
                     final_note = f"{ftype} ({amt}ml) - {note}" if amt > 0 else f"{ftype} - {note}"
-                    save_log("Feed", final_note, cg)
+                    save_log("Feed", final_note)
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
-            cg = st.selectbox("Caregiver", caregiver_options, key="sl_cg")
+            st.write(f"Logging as: **{st.session_state.current_caregiver}**")
             
             if not st.session_state.sleep_active:
                 mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
@@ -194,7 +214,7 @@ else:
                         end_t = datetime.now()
                         mins = int((end_t - st.session_state.sleep_start_time).total_seconds() / 60)
                         note = f"Slept for {mins} minutes ({st.session_state.sleep_start_time.strftime('%H:%M')} - {end_t.strftime('%H:%M')})"
-                        save_log("Sleep", note, cg, st.session_state.sleep_start_time)
+                        save_log("Sleep", note, st.session_state.sleep_start_time)
                         st.session_state.sleep_active = False
                 with col2:
                     if st.button("Cancel", use_container_width=True):
@@ -203,19 +223,19 @@ else:
 
         elif action == "Diaper":
             with st.form("diaper_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", caregiver_options)
+                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
                 status = st.selectbox("Status", ["Wet", "Dirty", "Both"])
                 note = st.text_area("Extra Notes", placeholder="e.g., minor rash, heavy wet...")
                 if st.form_submit_button("Save Diaper"):
                     final_note = f"Diaper: {status} - {note}" if note else f"Diaper: {status}"
-                    save_log("Diaper", final_note, cg)
+                    save_log("Diaper", final_note)
 
         elif action == "Note":
             with st.form("note_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", caregiver_options)
+                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
                 note = st.text_area("Details", placeholder="Enter milestone, mood, or health note...")
                 if st.form_submit_button("Save Note"):
-                    save_log("Note", note, cg)
+                    save_log("Note", note)
 
     with tab_analytics:
         st.subheader("📈 Trends & Timeline")
