@@ -54,7 +54,7 @@ if action == "Feed":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Feed saved to database!")
         st.rerun()
       except Exception as e:
@@ -103,7 +103,7 @@ elif action == "Sleep":
             "start_date_time": st.session_state.sleep_start_time.isoformat(),
         }
         try:
-          supabase.table("baby_logs").insert(data).execute()
+          supabase.schema("public").table("baby_logs").insert(data).execute()
           st.session_state.sleep_active = False
           st.session_state.sleep_start_time = None
           st.success("Sleep session saved to database!")
@@ -143,7 +143,7 @@ elif action == "Diaper":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Diaper logged to database!")
         st.rerun()
       except Exception as e:
@@ -164,7 +164,7 @@ elif action == "Note":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Note saved to database!")
         st.rerun()
       except Exception as e:
@@ -176,7 +176,8 @@ st.subheader("Recent Activity")
 
 try:
   response = (
-      supabase.table("baby_logs")
+      supabase.schema("public")
+      .table("baby_logs")
       .select("id, type, created_by_caregiver, note, start_date_time")
       .order("start_date_time", desc=True)
       .limit(25)
@@ -206,7 +207,7 @@ try:
 
         with col_del:
           if st.button("Delete", key=f"del_{log_id}"):
-            supabase.table("baby_logs").delete().eq("id", log_id).execute()
+            supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
             st.success("Deleted!")
             st.rerun()
 
