@@ -23,7 +23,6 @@ with st.form("activity_form", clear_on_submit=True):
   activity_type = st.selectbox(
       "Activity Type", ["bottle_feed", "sleep", "diaper", "solid_feed", "note"]
   )
-  profile_name = st.selectbox("Baby Profile", ["Baby"])
   caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
   note = st.text_area("Note / Details")
 
@@ -39,9 +38,8 @@ with st.form("activity_form", clear_on_submit=True):
     }
 
     try:
-      response = (
-          supabase.schema("public").table("baby_logs").insert(data).execute()
-      )
+      # Standard insert without chained schema helper
+      response = supabase.table("baby_logs").insert(data).execute()
       st.success("Saved successfully!")
       st.rerun()
     except Exception as e:
@@ -53,9 +51,10 @@ st.subheader("Activity Timeline")
 
 try:
   response = (
-      supabase.schema("public")
-      .table("baby_logs")
+      supabase.table("baby_logs")
       .select("id, type, created_by_caregiver, note, start_date_time")
+      .order("start_date_time", desc=True)
+      .limit(20)
       .execute()
   )
   logs = response.data
