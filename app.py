@@ -1,79 +1,75 @@
 from datetime import datetime
 import streamlit as st
-from supabase import create_client
 
+# Page Configuration
 st.set_page_config(
-    page_title="Baby Tracker", page_icon="👶", layout="centered"
+    page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
+# App Header
+st.title("🍼 Smart Baby")
+st.caption("Your lightweight daily companion for tracking baby activities.")
 
-@st.cache_resource
-def init_supabase():
-  return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+# Session state initialization for mock logs (until we reconnect the database)
+if "logs" not in st.session_state:
+  st.session_state.logs = []
 
+# Quick Action Selector
+action = st.radio(
+    "Select Activity",
+    ["Feed", "Sleep", "Diaper", "Note"],
+    horizontal=True,
+)
 
-supabase = init_supabase()
-
-st.title("👶 Nara-Synced Baby Tracker")
-
-# Input Form
-with st.form("activity_form", clear_on_submit=True):
-  st.subheader("Log New Event")
-
-  activity_type = st.selectbox(
-      "Activity Type", ["bottle_feed", "sleep", "diaper", "solid_feed", "note"]
-  )
+# Input Form based on selected action
+with st.form("smart_baby_form", clear_on_submit=True):
+  st.subheader(f"Log: {action}")
+  
   caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
-  note = st.text_area("Note / Details")
+  
+  # Dynamic fields based on action type
+  if action == "Feed":
+    feed_type = st.selectbox("Feed Type", ["Breast Milk", "Formula", "Solid"])
+    amount = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
+    details = f"{feed_type} - {amount}ml" if amount > 0 else f"{feed_type}"
+  elif action == "Sleep":
+    duration = st.number_input("Duration (minutes)", min_value=1, value=60)
+    details = f"Slept for {duration} mins"
+  elif action == "Diaper":
+    diaper_status = st.selectbox("Type", ["Wet", "Dirty", "Both"])
+    details = f"Diaper: {diaper_status}"
+  else:
+    details = ""
 
-  submitted = st.form_submit_button("Save Entry")
+  note = st.text_area("Extra Notes", value=details)
+  submitted = st.form_submit_button("Save Activity", use_container_width=True)
 
   if submitted:
-    now_utc = datetime.now()
-    data = {
-        "type": activity_type,
-        "created_by_caregiver": caregiver,
+    new_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "action": action,
+        "caregiver": caregiver,
         "note": note,
-        "start_date_time": now_utc.isoformat(),
     }
+    st.session_state.logs.insert(0, new_entry)
+    st.success("Activity logged successfully!")
+    st.rerun()
 
-    try:
-      supabase.table("baby_logs").insert(data).execute()
-      st.success("Saved successfully!")
-      st.rerun()
-    except Exception as e:
-      st.error(f"Detailed Database Error: {e}")
-
-# Timeline View
+# Activity Timeline View
 st.divider()
-st.subheader("Activity Timeline")
+st.subheader("Recent Activity")
 
-try:
-  response = (
-      supabase.table("baby_logs")
-      .select("*")
-      .order("start_date_time", desc=True)
-      .limit(20)
-      .execute()
-  )
-  logs = response.data
-
-  if logs:
-    for log in logs:
-      time_raw = log.get("start_date_time")
-      time_str = (
-          time_raw.replace("T", " ")[:16] if time_raw else "Unknown time"
-      )
-
-      act_type = log.get("type", "unknown")
-      caregiver = log.get("created_by_caregiver", "Unknown")
-      note_text = log.get("note")
-
-      st.markdown(f"**{act_type.upper()}** — *{caregiver}* ({time_str})")
-      if note_text:
-        st.caption(f"📝 {note_text}")
+if st.session_state.logs:
+  for entry in st.session_state.logs:
+    with st.container():
+      st.markdown(f"**{entry['action']}** — *{entry['caregiver']}*")
+      if entry['note']:
+        st.write(f"📝 {entry['note']}")
+      st.caption(f"Logged at {entry['timestamp']}")
       st.write("---")
-  else:
-    st.info("No logs found yet.")
-except Exception as e:
-  st.error(f"Detailed Timeline Error: {e}")
+  
+  if st.button("Clear History"):
+    st.session_state.logs = []
+    st.rerun()
+else:
+  st.info("No activities logged yet. Use the form above to record your first entry!")
