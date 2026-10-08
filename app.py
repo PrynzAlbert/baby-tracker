@@ -1,20 +1,27 @@
 from datetime import datetime, timedelta
 import time
 import streamlit as st
+from supabase import create_client
 
 # Page Configuration
 st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
+
+# Initialize Supabase Connection
+@st.cache_resource
+def init_supabase():
+  return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+
+supabase = init_supabase()
+
 # App Header
 st.title("🍼 Smart Baby")
 st.caption("Your lightweight daily companion for tracking baby activities.")
 
-# Initialize session state for logs and sleep timer
-if "logs" not in st.session_state:
-  st.session_state.logs = []
-
+# Initialize sleep timer session state
 if "sleep_active" not in st.session_state:
   st.session_state.sleep_active = False
   st.session_state.sleep_start_time = None
@@ -38,16 +45,20 @@ if action == "Feed":
     feed_type = st.selectbox("Feed Type", ["Breast Milk", "Formula", "Solid"])
     amount = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
     note = st.text_area("Extra Notes", value=f"{feed_type} - {amount}ml" if amount > 0 else feed_type)
-    
+
     if st.form_submit_button("Save Feed", use_container_width=True):
-      st.session_state.logs.insert(0, {
-          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-          "action": "Feed",
-          "caregiver": caregiver,
+      data = {
+          "type": "Feed",
+          "created_by_caregiver": caregiver,
           "note": note,
-      })
-      st.success("Feed logged successfully!")
-      st.rerun()
+          "start_date_time": datetime.now().isoformat(),
+      }
+      try:
+        supabase.table("baby_logs").insert(data).execute()
+        st.success("Feed saved to database!")
+        st.rerun()
+      except Exception as e:
+        st.error(f"Database Error: {e}")
 
 # --- SLEEP TIMER SECTION ---
 elif action == "Sleep":
@@ -56,10 +67,9 @@ elif action == "Sleep":
 
   if not st.session_state.sleep_active:
     st.info("No sleep timer currently running.")
-    
-    # Non-form inputs so date/time pickers interact smoothly
+
     mode = st.radio("Start Mode", ["Start Now", "Add Past Start Time (Forgot to start)"], horizontal=True)
-    
+
     past_time = None
     if mode == "Add Past Start Time (Forgot to start)":
       col1, col2 = st.columns(2)
@@ -76,37 +86,37 @@ elif action == "Sleep":
       st.success("Sleep timer started!")
       st.rerun()
   else:
-    # Active timer dashboard layout
     st.warning(f"🔴 **Baby is sleeping!** Started by **{st.session_state.sleep_caregiver}** at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
-    
-    # Placeholder for live counting ticker
     timer_placeholder = st.empty()
-    
+
     col1, col2 = st.columns(2)
     with col1:
       if st.button("Stop & Save Sleep", type="primary", use_container_width=True):
         end_time = datetime.now()
         duration_mins = int((end_time - st.session_state.sleep_start_time).total_seconds() / 60)
-        
-        st.session_state.logs.insert(0, {
-            "timestamp": end_time.strftime("%Y-%m-%d %H:%M"),
-            "action": "Sleep",
-            "caregiver": caregiver,
-            "note": f"Slept for {duration_mins} minutes (Started: {st.session_state.sleep_start_time.strftime('%H:%M')}, Ended: {end_time.strftime('%H:%M')})",
-        })
-        
-        st.session_state.sleep_active = False
-        st.session_state.sleep_start_time = None
-        st.success("Sleep session saved to history!")
-        st.rerun()
-        
+        note = f"Slept for {duration_mins} minutes (Started: {st.session_state.sleep_start_time.strftime('%H:%M')}, Ended: {end_time.strftime('%H:%M')})"
+
+        data = {
+            "type": "Sleep",
+            "created_by_caregiver": caregiver,
+            "note": note,
+            "start_date_time": st.session_state.sleep_start_time.isoformat(),
+        }
+        try:
+          supabase.table("baby_logs").insert(data).execute()
+          st.session_state.sleep_active = False
+          st.session_state.sleep_start_time = None
+          st.success("Sleep session saved to database!")
+          st.rerun()
+        except Exception as e:
+          st.error(f"Database Error: {e}")
+
     with col2:
       if st.button("Cancel Timer", use_container_width=True):
         st.session_state.sleep_active = False
         st.session_state.sleep_start_time = None
         st.rerun()
-        
-    # Live ticker loop to update duration on screen
+
     for _ in range(5):
       if not st.session_state.sleep_active:
         break
@@ -124,16 +134,20 @@ elif action == "Diaper":
     caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="diaper_cg")
     diaper_status = st.selectbox("Type", ["Wet", "Dirty", "Both"])
     note = st.text_area("Extra Notes", value=f"Diaper: {diaper_status}")
-    
+
     if st.form_submit_button("Save Diaper", use_container_width=True):
-      st.session_state.logs.insert(0, {
-          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-          "action": "Diaper",
-          "caregiver": caregiver,
+      data = {
+          "type": "Diaper",
+          "created_by_caregiver": caregiver,
           "note": note,
-      })
-      st.success("Diaper logged successfully!")
-      st.rerun()
+          "start_date_time": datetime.now().isoformat(),
+      }
+      try:
+        supabase.table("baby_logs").insert(data).execute()
+        st.success("Diaper logged to database!")
+        st.rerun()
+      except Exception as e:
+        st.error(f"Database Error: {e}")
 
 # --- NOTE FORM ---
 elif action == "Note":
@@ -141,59 +155,64 @@ elif action == "Note":
     st.subheader("Log: Note")
     caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="note_cg")
     note = st.text_area("Details")
-    
-    if st.form_submit_button("Save Note", use_container_width=True):
-      st.session_state.logs.insert(0, {
-          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-          "action": "Note",
-          "caregiver": caregiver,
-          "note": note,
-      })
-      st.success("Note saved successfully!")
-      st.rerun()
 
-# --- ACTIVITY TIMELINE VIEW WITH EDIT/DELETE ---
+    if st.form_submit_button("Save Note", use_container_width=True):
+      data = {
+          "type": "Note",
+          "created_by_caregiver": caregiver,
+          "note": note,
+          "start_date_time": datetime.now().isoformat(),
+      }
+      try:
+        supabase.table("baby_logs").insert(data).execute()
+        st.success("Note saved to database!")
+        st.rerun()
+      except Exception as e:
+        st.error(f"Database Error: {e}")
+
+# --- ACTIVITY TIMELINE VIEW (FETCHED FROM SUPABASE) ---
 st.divider()
 st.subheader("Recent Activity")
 
-if st.session_state.logs:
-  for idx, entry in enumerate(st.session_state.logs):
-    with st.container():
-      col_info, col_edit, col_del = st.columns([6, 1.5, 1.5])
+try:
+  response = (
+      supabase.table("baby_logs")
+      .select("id, type, created_by_caregiver, note, start_date_time")
+      .order("start_date_time", desc=True)
+      .limit(25)
+      .execute()
+  )
+  logs = response.data
+
+  if logs:
+    for idx, log in enumerate(logs):
+      log_id = log.get("id")
+      act_type = log.get("type", "Activity")
+      caregiver = log.get("created_by_caregiver", "Unknown")
+      note_text = log.get("note", "")
+      time_raw = log.get("start_date_time")
       
-      with col_info:
-        st.markdown(f"**{entry['action']}** — *{entry['caregiver']}*")
-        if entry['note']:
-          st.write(f"📝 {entry['note']}")
-        st.caption(f"Logged at {entry['timestamp']}")
-      
-      with col_edit:
-        if st.button("Edit", key=f"edit_{idx}ʿ"):
-          st.session_state.editing_index = idx
-      with col_del:
-        if st.button("Delete", key=f"del_{idx}"):
-          st.session_state.logs.pop(idx)
-          st.rerun()
-          
-      # Inline Edit Form if this item is selected for editing
-      if st.session_state.get("editing_index") == idx:
-        with st.form(f"edit_form_{idx}"):
-          st.write(f"**Editing Entry #{idx + 1}**")
-          new_note = st.text_area("Update Note / Details", value=entry['note'])
-          new_cg = st.selectbox("Update Caregiver", ["Albert", "Partner", "Nanny"], index=["Albert", "Partner", "Nanny"].index(entry['caregiver']) if entry['caregiver'] in ["Albert", "Partner", "Nanny"] else 0)
-          
-          if st.form_submit_button("Save Changes"):
-            st.session_state.logs[idx]['note'] = new_note
-            st.session_state.logs[idx]['caregiver'] = new_cg
-            st.session_state.editing_index = None
-            st.success("Updated successfully!")
+      # Clean up timestamp format for readable display
+      time_str = time_raw.replace("T", " ")[:16] if time_raw else "Unknown time"
+
+      with st.container():
+        col_info, col_del = st.columns([5, 1])
+
+        with col_info:
+          st.markdown(f"**{act_type.upper()}** — *{caregiver}*")
+          if note_text:
+            st.write(f"📝 {note_text}")
+          st.caption(f"Logged at {time_str}")
+
+        with col_del:
+          if st.button("Delete", key=f"del_{log_id}"):
+            supabase.table("baby_logs").delete().eq("id", log_id).execute()
+            st.success("Deleted!")
             st.rerun()
-            
-      st.write("---")
-  
-  if st.button("Clear All History"):
-    st.session_state.logs = []
-    st.session_state.editing_index = None
-    st.rerun()
-else:
-  st.info("No activities logged yet. Use the selectors above to record your first entry!")
+
+        st.write("---")
+  else:
+    st.info("No activities logged in the database yet. Record your first entry above!")
+
+except Exception as e:
+  st.error(f"Timeline Loading Error: {e}")
