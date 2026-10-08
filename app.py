@@ -62,7 +62,6 @@ try:
     session = supabase.auth.get_session()
     if session and session.user:
         st.session_state.user = session.user
-        # Fetch profile data
         profile_res = supabase.schema("public").table("profiles").select("*").eq("id", session.user.id).execute()
         if profile_res.data:
             st.session_state.profile = profile_res.data[0]
@@ -90,7 +89,7 @@ if not st.session_state.user or not st.session_state.profile:
                             st.session_state.profile = p_res.data[0]
                             st.rerun()
                         else:
-                            st.warning("Signed in, but profile details were not found. Please verify your profile table.")
+                            st.warning("Signed in, but profile details were not found.")
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
@@ -108,19 +107,19 @@ if not st.session_state.user or not st.session_state.profile:
                     st.error("Please fill in your username and baby's name.")
                 else:
                     try:
-                        # 1. Sign up user auth
-                        auth_res = supabase.auth.sign_up({"email": reg_email, "password": reg_password})
-                        if auth_res.user:
-                            user_id = auth_res.user.id
-                            # 2. Insert profile record into public.profiles
-                            profile_data = {
-                                "id": user_id,
-                                "caregiver_name": caregiver_name,
-                                "baby_name": baby_name,
-                                "baby_dob": str(baby_dob)
+                        auth_res = supabase.auth.sign_up({
+                            "email": reg_email,
+                            "password": reg_password,
+                            "options": {
+                                "data": {
+                                    "caregiver_name": caregiver_name,
+                                    "baby_name": baby_name,
+                                    "baby_dob": str(baby_dob)
+                                }
                             }
-                            supabase.schema("public").table("profiles").insert(profile_data).execute()
-                            st.success("Account & profile created successfully! You can now sign in using the 'Sign In' tab.")
+                        })
+                        if auth_res.user:
+                            st.success("Account & profile created successfully! You can now sign in.")
                     except Exception as e:
                         st.error(f"Registration failed: {e}")
 
