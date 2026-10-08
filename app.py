@@ -55,22 +55,16 @@ supabase = init_supabase()
 # Session State Init
 if "user" not in st.session_state:
     st.session_state.user = None
-if "profile" not in st.session_state:
-    st.session_state.profile = None
 
 try:
     session = supabase.auth.get_session()
     if session and session.user:
         st.session_state.user = session.user
-        # Fetch profile data
-        profile_res = supabase.schema("public").table("profiles").select("*").eq("id", session.user.id).execute()
-        if profile_res.data:
-            st.session_state.profile = profile_res.data[0]
 except:
     pass
 
 # --- AUTHENTICATION & REGISTRATION GATE ---
-if not st.session_state.user or not st.session_state.profile:
+if not st.session_state.user:
     st.title("🍼 Smart Baby")
     st.caption("Sign in or register your family tracking profile.")
     
@@ -85,12 +79,7 @@ if not st.session_state.user or not st.session_state.profile:
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if res.user:
                         st.session_state.user = res.user
-                        p_res = supabase.schema("public").table("profiles").select("*").eq("id", res.user.id).execute()
-                        if p_res.data:
-                            st.session_state.profile = p_res.data[0]
-                            st.rerun()
-                        else:
-                            st.warning("Signed in, but profile details missing. Please register profile details.")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
@@ -108,50 +97,54 @@ if not st.session_state.user or not st.session_state.profile:
                     st.error("Please fill in your username and baby's name.")
                 else:
                     try:
-                        # 1. Sign up user auth
-                        auth_res = supabase.auth.sign_up({"email": reg_email, "password": reg_password})
-                        if auth_res.user:
-                            user_id = auth_res.user.id
-                            # 2. Insert profile record
-                            profile_data = {
-                                "id": user_id,
-                                "caregiver_name": caregiver_name,
-                                "baby_name": baby_name,
-                                "baby_dob": str(baby_dob)
+                        # Sign up and store metadata securely inside user auth
+                        auth_res = supabase.auth.sign_up({
+                            "email": reg_email, 
+                            "password": reg_password,
+                            "options": {
+                                "data": {
+                                    "caregiver_name": caregiver_name,
+                                    "baby_name": baby_name,
+                                    "baby_dob": str(baby_dob)
+                                }
                             }
-                            supabase.schema("public").table("profiles").insert(profile_data).execute()
+                        })
+                        if auth_res.user:
                             st.success("Account & profile created successfully! You can now sign in.")
                     except Exception as e:
-                        st.error(f> "Registration failed: {e}")
+                        st.error(f"Registration failed: {e}")
 
 else:
-    # --- MAIN APP (Authenticated & Profile Loaded) ---
-    profile = st.session_state.profile
-    current_caregiver = profile.get("caregiver_name", "Caregiver")
-    baby_name = profile.get("baby_name", "Baby")
-    baby_dob_str = profile.get("baby_dob")
+    # --- MAIN APP (Authenticated) ---
+    user_metadata = st.session_state.user.user_metadata or {}
+    current_caregiver = user_metadata.get("caregiver_name", "Caregiver")
+    baby_name = user_metadata.get("baby_name", "Baby")
+    baby_dob_str = user_metadata.get("baby_dob")
 
     # Calculate baby's age
     age_text = ""
     if baby_dob_str:
-        dob = datetime.strptime(baby_dob_str, "%Y-%m-%d").date()
-        days_old = (datetime.now().date() - dob).days
-        if days_old < 30:
-            age_text = f"{days_old} days old"
-        elif days_old < 365:
-            age_text = f"{round(days_old / 30, 1)} months old"
-        else:
-            age_text = f"{round(days_old / 365, 1)} years old"
+        try:
+            dob = datetime.strptime(baby_dob_str, "%Y-%m-%d").date()
+            days_old = (datetime.now().date() - dob).days
+            if days_old < 30:
+                age_text = f"{days_old} days old"
+            elif days_old < 365:
+                age_text = f"{round(days_old / 30, 1)} months old"
+            else:
+                age_text = f"{round(days_old / 365, 1)} years old"
+        except:
+            pass
 
     with st.sidebar:
         st.write(f"Signed in as:\n**{current_caregiver}**")
-        st.caption(f"Baby: **{baby_name}** ({age_text})")
+        if baby_name:
+            st.caption(f"Baby: **{baby_name}** ({age_text})")
         st.divider()
         if st.button("Log Out", use_container_width=True):
             try: supabase.auth.sign_out()
             except: pass
             st.session_state.user = None
-            st.session_state.profile = None
             st.rerun()
 
     st.title(f"🍼 {baby_name}'s Tracker")
