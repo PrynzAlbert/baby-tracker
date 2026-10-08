@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit as st
 
 # Page Configuration
@@ -10,9 +10,14 @@ st.set_page_config(
 st.title("🍼 Smart Baby")
 st.caption("Your lightweight daily companion for tracking baby activities.")
 
-# Session state initialization for mock logs (until we reconnect the database)
+# Initialize session state for logs and sleep timer
 if "logs" not in st.session_state:
   st.session_state.logs = []
+
+if "sleep_active" not in st.session_state:
+  st.session_state.sleep_active = False
+  st.session_state.sleep_start_time = None
+  st.session_state.sleep_caregiver = "Albert"
 
 # Quick Action Selector
 action = st.radio(
@@ -21,41 +26,124 @@ action = st.radio(
     horizontal=True,
 )
 
-# Input Form based on selected action
-with st.form("smart_baby_form", clear_on_submit=True):
-  st.subheader(f"Log: {action}")
-  
-  caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
-  
-  # Dynamic fields based on action type
-  if action == "Feed":
+# --- FEED FORM ---
+if action == "Feed":
+  with st.form("feed_form", clear_on_submit=True):
+    st.subheader("Log: Feed")
+    caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="feed_cg")
     feed_type = st.selectbox("Feed Type", ["Breast Milk", "Formula", "Solid"])
     amount = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
-    details = f"{feed_type} - {amount}ml" if amount > 0 else f"{feed_type}"
-  elif action == "Sleep":
-    duration = st.number_input("Duration (minutes)", min_value=1, value=60)
-    details = f"Slept for {duration} mins"
-  elif action == "Diaper":
-    diaper_status = st.selectbox("Type", ["Wet", "Dirty", "Both"])
-    details = f"Diaper: {diaper_status}"
+    note = st.text_area("Extra Notes", value=f"{feed_type} - {amount}ml" if amount > 0 else feed_type)
+    
+    if st.form_submit_button("Save Feed", use_container_width=True):
+      st.session_state.logs.insert(0, {
+          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+          "action": "Feed",
+          "caregiver": caregiver,
+          "note": note,
+      })
+      st.success("Feed logged successfully!")
+      st.rerun()
+
+# --- SLEEP TIMER SECTION ---
+elif action == "Sleep":
+  st.subheader("💤 Sleep Tracker")
+  
+  # Caregiver selection available to anyone
+  caregiver = st.selectbox("Caregiver (Handoff)", ["Albert", "Partner", "Nanny"], key="sleep_cg")
+
+  if not st.session_state.sleep_active:
+    st.info("No sleep timer currently running.")
+    
+    with st.form("start_sleep_form"):
+      st.write("**Start a Sleep Session**")
+      mode = st.radio("Start Mode", ["Start Now", "Add Past Start Time (Forgot to start)"], horizontal=True)
+      
+      past_time = None
+      if mode == "Add Past Start Time (Forgot to start)":
+        col1, col2 = st.columns(2)
+        with col1:
+          sleep_date = st.date_input("Start Date", datetime.now().date())
+        with col2:
+          sleep_time = st.time_input("Start Time", (datetime.now() - timedelta(hours=1)).time())
+        past_time = datetime.combine(sleep_date, sleep_time)
+
+      if st.form_submit_button("Start Sleep Timer", use_container_width=True):
+        st.session_state.sleep_active = True
+        st.session_state.sleep_start_time = past_time if past_time else datetime.now()
+        st.session_state.sleep_caregiver = caregiver
+        st.success("Sleep timer started!")
+        st.rerun()
   else:
-    details = ""
+    # Timer is running
+    elapsed_seconds = int((datetime.now() - st.session_state.sleep_start_time).total_seconds())
+    hours, remainder = divmod(elapsed_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    st.warning(f"🔴 **Baby is sleeping!** Started by **{st.session_state.sleep_caregiver}** at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
+    st.metric("Current Duration", f"{hours}h {minutes}m {seconds}s")
 
-  note = st.text_area("Extra Notes", value=details)
-  submitted = st.form_submit_button("Save Activity", use_container_width=True)
+    col1, col2 = st.columns(2)
+    with col1:
+      if st.button("Stop & Save Sleep", type="primary", use_container_width=True):
+        end_time = datetime.now()
+        duration_mins = int((end_time - st.session_state.sleep_start_time).total_seconds() / 60)
+        
+        st.session_state.logs.insert(0, {
+            "timestamp": end_time.strftime("%Y-%m-%d %H:%M"),
+            "action": "Sleep",
+            "caregiver": caregiver,
+            "note": f"Slept for {duration_mins} minutes (Started: {st.session_state.sleep_start_time.strftime('%H:%M')}, Ended: {end_time.strftime('%H:%M')})",
+        })
+        
+        # Reset timer state
+        st.session_state.sleep_active = False
+        st.session_state.sleep_start_time = None
+        st.success("Sleep session saved to history!")
+        st.rerun()
+        
+    with col2:
+      if st.button("Cancel Timer", use_container_width=True):
+        st.session_state.sleep_active = False
+        st.session_state.sleep_start_time = None
+        st.rerun()
 
-  if submitted:
-    new_entry = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "action": action,
-        "caregiver": caregiver,
-        "note": note,
-    }
-    st.session_state.logs.insert(0, new_entry)
-    st.success("Activity logged successfully!")
-    st.rerun()
+# --- DIAPER FORM ---
+elif action == "Diaper":
+  with st.form("diaper_form", clear_on_submit=True):
+    st.subheader("Log: Diaper")
+    caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="diaper_cg")
+    diaper_status = st.selectbox("Type", ["Wet", "Dirty", "Both"])
+    note = st.text_area("Extra Notes", value=f"Diaper: {diaper_status}")
+    
+    if st.form_submit_button("Save Diaper", use_container_width=True):
+      st.session_state.logs.insert(0, {
+          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+          "action": "Diaper",
+          "caregiver": caregiver,
+          "note": note,
+      })
+      st.success("Diaper logged successfully!")
+      st.rerun()
 
-# Activity Timeline View
+# --- NOTE FORM ---
+elif action == "Note":
+  with st.form("note_form", clear_on_submit=True):
+    st.subheader("Log: Note")
+    caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="note_cg")
+    note = st.text_area("Details")
+    
+    if st.form_submit_button("Save Note", use_container_width=True):
+      st.session_state.logs.insert(0, {
+          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+          "action": "Note",
+          "caregiver": caregiver,
+          "note": note,
+      })
+      st.success("Note saved successfully!")
+      st.rerun()
+
+# --- ACTIVITY TIMELINE VIEW ---
 st.divider()
 st.subheader("Recent Activity")
 
@@ -72,4 +160,4 @@ if st.session_state.logs:
     st.session_state.logs = []
     st.rerun()
 else:
-  st.info("No activities logged yet. Use the form above to record your first entry!")
+  st.info("No activities logged yet. Use the selectors above to record your first entry!")
