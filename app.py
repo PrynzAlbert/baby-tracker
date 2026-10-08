@@ -71,10 +71,51 @@ except:
 # --- AUTHENTICATION & REGISTRATION GATE ---
 if not st.session_state.user or not st.session_state.profile:
     st.title("🍼 Smart Baby")
-    st.caption("Sign in or register your family tracking profile.")
+    st.caption("Register your family profile or sign in to your account.")
     
-    tab_login, tab_signup = st.tabs(["Sign In", "Register Profile"])
+    tab_signup, tab_login = st.tabs(["Register Profile", "Sign In"])
     
+    with tab_signup:
+        with st.form("signup_form"):
+            reg_email = st.text_input("Email", key="su_email")
+            reg_password = st.text_input("Password", type="password", key="su_pass")
+            st.divider()
+            caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
+            
+            mode_reg = st.radio("Setup Type", ["Create New Baby Profile", "Join Existing Family (Partner)"])
+            
+            baby_name = ""
+            baby_dob = datetime.now().date()
+            family_code = ""
+
+            if mode_reg == "Create New Baby Profile":
+                baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
+                baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
+            else:
+                family_code = st.text_input("Family Invite Code (from your partner)", placeholder="Paste family UUID code here...")
+            
+            if st.form_submit_button("Create Account & Connect", use_container_width=True):
+                if not caregiver_name or (mode_reg == "Create New Baby Profile" and not baby_name) or (mode_reg == "Join Existing Family (Partner)" and not family_code):
+                    st.error("Please fill in all required fields.")
+                else:
+                    try:
+                        meta_data = {"caregiver_name": caregiver_name}
+                        if mode_reg == "Create New Baby Profile":
+                            meta_data["baby_name"] = baby_name
+                            meta_data["baby_dob"] = str(baby_dob)
+                        else:
+                            meta_data["family_code"] = family_code
+
+                        auth_res = supabase.auth.sign_up({
+                            "email": reg_email,
+                            "password": reg_password,
+                            "options": {"data": meta_data}
+                        })
+                        if auth_res.user:
+                            st.success("Account created successfully! You can now switch to the 'Sign In' tab.")
+                    except Exception as e:
+                        st.error(f"Registration failed: {e}")
+
     with tab_login:
         with st.form("login_form"):
             email = st.text_input("Email")
@@ -93,42 +134,13 @@ if not st.session_state.user or not st.session_state.profile:
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
-    with tab_signup:
-        with st.form("signup_form"):
-            reg_email = st.text_input("Email", key="su_email")
-            reg_password = st.text_input("Password", type="password", key="su_pass")
-            st.divider()
-            caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
-            baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
-            baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
-            
-            if st.form_submit_button("Create Account & Profile", use_container_width=True):
-                if not caregiver_name or not baby_name:
-                    st.error("Please fill in your username and baby's name.")
-                else:
-                    try:
-                        auth_res = supabase.auth.sign_up({
-                            "email": reg_email,
-                            "password": reg_password,
-                            "options": {
-                                "data": {
-                                    "caregiver_name": caregiver_name,
-                                    "baby_name": baby_name,
-                                    "baby_dob": str(baby_dob)
-                                }
-                            }
-                        })
-                        if auth_res.user:
-                            st.success("Account & profile created successfully! You can now sign in.")
-                    except Exception as e:
-                        st.error(f"Registration failed: {e}")
-
 else:
     # --- MAIN APP (Authenticated & Profile Loaded) ---
     profile = st.session_state.profile
     current_caregiver = profile.get("caregiver_name", "Caregiver")
     baby_name = profile.get("baby_name", "Baby")
     baby_dob_str = profile.get("baby_dob")
+    family_id = profile.get("family_id")
 
     # Calculate baby's age
     age_text = ""
@@ -149,6 +161,12 @@ else:
         st.write(f"Signed in as:\n**{current_caregiver}**")
         if baby_name:
             st.caption(f"Baby: **{baby_name}** ({age_text})")
+        
+        st.divider()
+        st.markdown("**Family Sharing Code:**")
+        st.code(family_id, language="text")
+        st.caption("Share this code with your partner so they can join this baby's tracker upon registration.")
+        
         st.divider()
         if st.button("Log Out", use_container_width=True):
             try: supabase.auth.sign_out()
@@ -158,7 +176,7 @@ else:
             st.rerun()
 
     st.title(f"🍼 {baby_name}'s Tracker")
-    st.caption(f"Welcome back, **{current_caregiver}**! Tracking live.")
+    st.caption(f"Welcome back, **{current_caregiver}**! Tracking live with family.")
 
     # --- TODAY'S SUMMARY METRICS ---
     today_str = datetime.now().strftime("%Y-%m-%d")
