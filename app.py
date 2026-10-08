@@ -3,13 +3,13 @@ import time
 import streamlit as st
 from supabase import create_client
 
-# 1. Page Configuration MUST be the first Streamlit command
+# Page Configuration
 st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
 
-# 2. Initialize Supabase Connection safely
+# Initialize Supabase Connection
 @st.cache_resource
 def init_supabase():
   return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -20,6 +20,49 @@ supabase = init_supabase()
 # App Header
 st.title("🍼 Smart Baby")
 st.caption("Your lightweight daily companion for tracking baby activities.")
+
+# --- SUMMARY DASHBOARD (TODAY'S STATS) ---
+st.subheader("📊 Today's Summary")
+today_str = datetime.now().strftime("%Y-%m-%d")
+
+try:
+  # Fetch today's logs for metrics calculation
+  dash_response = (
+      supabase.schema("public")
+      .table("baby_logs")
+      .select("type, note, start_date_time")
+      .gte("start_date_time", f"{today_str}T00:00:00")
+      .execute()
+  )
+  today_logs = dash_response.data or []
+
+  total_feeds = sum(1 for log in today_logs if log.get("type") == "Feed")
+  total_diapers = sum(1 for log in today_logs if log.get("type") == "Diaper")
+  
+  # Calculate total sleep minutes from notes if formatted
+  total_sleep_mins = 0
+  for log in today_logs:
+    if log.get("type") == "Sleep":
+      note_text = log.get("note", "")
+      if "Slept for" in note_text:
+        try:
+          # Extract minutes number from "Slept for X minutes..."
+          parts = note_text.split("Slept for ")[1].split(" minutes")
+          total_sleep_mins += int(parts[0])
+        except:
+          pass
+
+  sleep_hours = round(total_sleep_mins / 60, 1)
+
+  col1, col2, col3 = st.columns(3)
+  col1.metric("💤 Sleep Today", f"{sleep_hours} hrs")
+  col2.metric("🍼 Feeds", f"{total_feeds}")
+  col3.metric("🧷 Diapers", f"{total_diapers}")
+
+except Exception as e:
+  st.info("Log metrics will appear here once activities are recorded.")
+
+st.divider()
 
 # Initialize session state for sleep timer
 if "sleep_active" not in st.session_state:
@@ -51,7 +94,7 @@ if action == "Feed":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Feed saved to database!")
         st.rerun()
       except Exception as e:
@@ -100,7 +143,7 @@ elif action == "Sleep":
             "start_date_time": st.session_state.sleep_start_time.isoformat(),
         }
         try:
-          supabase.table("baby_logs").insert(data).execute()
+          supabase.schema("public").table("baby_logs").insert(data).execute()
           st.session_state.sleep_active = False
           st.session_state.sleep_start_time = None
           st.success("Sleep session saved to database!")
@@ -140,7 +183,7 @@ elif action == "Diaper":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Diaper logged to database!")
         st.rerun()
       except Exception as e:
@@ -161,19 +204,20 @@ elif action == "Note":
           "start_date_time": datetime.now().isoformat(),
       }
       try:
-        supabase.table("baby_logs").insert(data).execute()
+        supabase.schema("public").table("baby_logs").insert(data).execute()
         st.success("Note saved to database!")
         st.rerun()
       except Exception as e:
         st.error(f"Database Error: {e}")
 
-# --- ACTIVITY TIMELINE VIEW (FETCHED FROM SUPABASE) ---
+# --- ACTIVITY TIMELINE VIEW ---
 st.divider()
 st.subheader("Recent Activity")
 
 try:
   response = (
-      supabase.table("baby_logs")
+      supabase.schema("public")
+      .table("baby_logs")
       .select("id, type, created_by_caregiver, note, start_date_time")
       .order("start_date_time", desc=True)
       .limit(25)
@@ -202,7 +246,7 @@ try:
 
         with col_del:
           if st.button("Delete", key=f"del_{log_id}"):
-            supabase.table("baby_logs").delete().eq("id", log_id).execute()
+            supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
             st.success("Deleted!")
             st.rerun()
 
@@ -211,4 +255,4 @@ try:
     st.info("No activities logged in the database yet. Record your first entry above!")
 
 except Exception as e:
-  st.error(f"Timeline Error: {e}")
+    st.error(f"Timeline Error: {e}")
