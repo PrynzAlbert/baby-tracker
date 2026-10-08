@@ -9,23 +9,42 @@ st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
-# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS ---
+# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS & WHITE-ON-WHITE FIXES ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #2D3748; }
     h1, h2, h3, h4 { color: #1A365D !important; }
     
-    /* Fix radio button visibility on mobile */
+    /* Fix radio button visibility */
     .stRadio label { color: #1A365D !important; font-weight: 700 !important; font-size: 1.1rem !important; }
     
+    /* Fix input fields, text areas, and selectboxes text/background color */
+    input, textarea { color: #2D3748 !important; background-color: #FFFFFF !important; border: 1px solid #CBD5E0 !important; border-radius: 8px !important; }
+    
+    /* Fix selectbox internal text and background */
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+        border-radius: 8px !important;
+        border: 1px solid #CBD5E0 !important;
+    }
+    .stSelectbox span { color: #2D3748 !important; }
+    
+    /* Fix dropdown popover list items */
+    div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+    }
+    div[data-baseweb="menu"] div:hover {
+        background-color: #EDF2F7 !important;
+        color: #1A365D !important;
+    }
+
     /* Buttons */
     .stButton>button { background-color: #4299E1; color: white; border-radius: 12px; border: none; font-weight: 600; padding: 0.5rem 1rem; }
     .stButton>button:hover { background-color: #3182CE; color: white; }
     .stFormSubmitButton>button { background-color: #48BB78; color: white; border-radius: 12px; border: none; font-weight: 600; width: 100%; }
     
-    /* Inputs */
-    input, textarea, select { border-radius: 8px !important; border: 1px solid #CBD5E0 !important; background-color: #FFFFFF !important; }
-
     /* Metric Cards */
     div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0; }
     div[data-testid="stMetric"] label { color: #4A5568 !important; }
@@ -84,8 +103,12 @@ if not st.session_state.user:
 
 else:
     # --- MAIN APP ---
+    user_email = st.session_state.user.email
+    default_caregiver = user_email.split("@")[0].capitalize()
+    caregiver_options = [default_caregiver, "Partner", "Nanny"]
+
     with st.sidebar:
-        st.write(f"Signed in as:\n**{st.session_state.user.email}**")
+        st.write(f"Signed in as:\n**{user_email}**")
         if st.button("Log Out", use_container_width=True):
             try: supabase.auth.sign_out()
             except: pass
@@ -123,7 +146,7 @@ else:
 
         action = st.radio("Select Activity", ["Feed", "Sleep", "Diaper", "Note"], horizontal=True)
 
-        def save_log(act_type, note_text, caregiver="Albert", start_time=None):
+        def save_log(act_type, note_text, caregiver, start_time=None):
             data = {
                 "type": act_type,
                 "created_by_caregiver": caregiver,
@@ -139,16 +162,17 @@ else:
 
         if action == "Feed":
             with st.form("feed_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+                cg = st.selectbox("Caregiver", caregiver_options)
                 ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
                 amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
-                note = st.text_area("Notes", value=f"{ftype} - {amt}ml" if amt > 0 else ftype)
+                note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
                 if st.form_submit_button("Save Feed"):
-                    save_log("Feed", note, cg)
+                    final_note = f"{ftype} ({amt}ml) - {note}" if amt > 0 else f"{ftype} - {note}"
+                    save_log("Feed", final_note, cg)
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
-            cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="sl_cg")
+            cg = st.selectbox("Caregiver", caregiver_options, key="sl_cg")
             
             if not st.session_state.sleep_active:
                 mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
@@ -179,15 +203,17 @@ else:
 
         elif action == "Diaper":
             with st.form("diaper_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+                cg = st.selectbox("Caregiver", caregiver_options)
                 status = st.selectbox("Status", ["Wet", "Dirty", "Both"])
+                note = st.text_area("Extra Notes", placeholder="e.g., minor rash, heavy wet...")
                 if st.form_submit_button("Save Diaper"):
-                    save_log("Diaper", f"Diaper: {status}", cg)
+                    final_note = f"Diaper: {status} - {note}" if note else f"Diaper: {status}"
+                    save_log("Diaper", final_note, cg)
 
         elif action == "Note":
             with st.form("note_form", clear_on_submit=True):
-                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
-                note = st.text_area("Details")
+                cg = st.selectbox("Caregiver", caregiver_options)
+                note = st.text_area("Details", placeholder="Enter milestone, mood, or health note...")
                 if st.form_submit_button("Save Note"):
                     save_log("Note", note, cg)
 
