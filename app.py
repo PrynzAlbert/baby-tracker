@@ -1,73 +1,80 @@
-CREATE TABLE baby_logs (
-    id                                     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    type                                   TEXT,
-    profile_name                           TEXT,
-    start_date_time                        TIMESTAMP WITH TIME ZONE,
-    start_date_time_epoch                  BIGINT,
-    created_by_caregiver                   TEXT,
-    last_updated_by_caregiver              TEXT,
-    note                                   TEXT,
-    time_zone                              TEXT,
-    sleep_duration_seconds                 INTEGER,
-    sleep_end_date_time                    TIMESTAMP WITH TIME ZONE,
-    sleep_end_date_time_epoch              BIGINT,
-    bottle_feed_type                       TEXT,
-    bottle_feed_breast_milk_volume         NUMERIC,
-    bottle_feed_breast_milk_volume_unit    TEXT,
-    bottle_feed_formula_name               TEXT,
-    bottle_feed_formula_volume             NUMERIC,
-    bottle_feed_formula_volume_unit        TEXT,
-    bottle_feed_volume                     NUMERIC,
-    bottle_feed_volume_unit                TEXT,
-    solid_feed_food                        TEXT,
-    solid_feed_meal                        TEXT,
-    diaper_type                            TEXT,
-    diaper_detail                          TEXT,
-    diaper_dirty_color                     TEXT,
-    diaper_dirty_texture                   TEXT,
-    medical_medication                     TEXT,
-    medical_temperature                    NUMERIC(4,1),
-    medical_temperature_unit               TEXT,
-    growth_head_size                       NUMERIC(4,1),
-    growth_head_size_unit                  TEXT,
-    growth_height                          NUMERIC(5,2),
-    growth_height_unit                     TEXT,
-    growth_weight                          NUMERIC(5,2),
-    growth_weight_unit                     TEXT,
-    breastfeed_begin_side                  TEXT,
-    breastfeed_end_side                    TEXT,
-    breastfeed_left_duration_seconds       INTEGER,
-    breastfeed_right_duration_seconds      INTEGER,
-    pump_duration_seconds                  INTEGER,
-    pump_end_date_time                     TIMESTAMP WITH TIME ZONE,
-    pump_end_date_time_epoch               BIGINT,
-    pump_left_volume                       NUMERIC,
-    pump_left_volume_unit                  TEXT,
-    pump_right_volume                      NUMERIC,
-    pump_right_volume_unit                 TEXT,
-    pump_total_volume                      NUMERIC,
-    pump_total_volume_unit                 TEXT,
-    milestone_milestone                    TEXT,
-    vaccine_vaccine                        TEXT,
-    routine_routine                        TEXT,
-    combo_feed_begin_side                  TEXT,
-    combo_feed_end_side                    TEXT,
-    combo_feed_left_duration_seconds       INTEGER,
-    combo_feed_right_duration_seconds      INTEGER,
-    combo_feed_type                        TEXT,
-    combo_feed_breast_milk_volume          NUMERIC,
-    combo_feed_breast_milk_volume_unit     TEXT,
-    combo_feed_formula_name                TEXT,
-    combo_feed_formula_volume              NUMERIC,
-    combo_feed_formula_volume_unit         TEXT,
-    combo_feed_volume                      NUMERIC,
-    combo_feed_volume_unit                 TEXT,
-    profile_birth_date                     DATE,
-    profile_birth_date_adjusted            DATE,
-    profile_sex                            TEXT,
-    profile_type                           TEXT,
-    family_key                             TEXT,
-    profile_key                            TEXT,
-    activity_key                           TEXT,
-    created_at                             TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+from datetime import datetime
+import streamlit as st
+from supabase import create_client
+
+st.set_page_config(
+    page_title="Baby Tracker", page_icon="👶", layout="centered"
+)
+
+
+@st.cache_resource
+def init_supabase():
+  return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+
+supabase = init_supabase()
+
+st.title("👶 Nara-Synced Baby Tracker")
+
+# Input Form
+with st.form("activity_form", clear_on_submit=True):
+  st.subheader("Log New Event")
+
+  activity_type = st.selectbox(
+      "Activity Type", ["bottle_feed", "sleep", "diaper", "solid_feed", "note"]
+  )
+  profile_name = st.selectbox("Baby Profile", ["Baby"])
+  caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+  note = st.text_area("Note / Details")
+
+  submitted = st.form_submit_button("Save Entry")
+
+  if submitted:
+    now_utc = datetime.now()
+    data = {
+        "type": activity_type,
+        "profile_name": profile_name,
+        "created_by_caregiver": caregiver,
+        "last_updated_by_caregiver": caregiver,
+        "note": note,
+        "start_date_time": now_utc.isoformat(),
+        "start_date_time_epoch": int(now_utc.timestamp() * 1000),
+    }
+
+    supabase.table("baby_logs").insert(data).execute()
+    st.success("Saved successfully!")
+    st.rerun()
+
+# Timeline View
+st.divider()
+st.subheader("Activity Timeline")
+
+try:
+  response = (
+      supabase.table("baby_logs")
+      .select("*")
+      .order("start_date_time", desc=True)
+      .limit(20)
+      .execute()
+  )
+  logs = response.data
+
+  if logs:
+    for log in logs:
+      time_raw = log.get("start_date_time")
+      time_str = (
+          time_raw.replace("T", " ")[:16] if time_raw else "Unknown time"
+      )
+
+      act_type = log.get("type", "unknown")
+      caregiver = log.get("created_by_caregiver", "Unknown")
+      note_text = log.get("note")
+
+      st.markdown(f"**{act_type.upper()}** — *{caregiver}* ({time_str})")
+      if note_text:
+        st.caption(f"📝 {note_text}")
+      st.write("---")
+  else:
+    st.info("No logs found.")
+except Exception as e:
+  st.error(f"Error loading logs: {e}")
