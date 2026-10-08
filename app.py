@@ -38,8 +38,7 @@ with st.form("activity_form", clear_on_submit=True):
     }
 
     try:
-      # Standard insert without chained schema helper
-      response = supabase.table("baby_logs").insert(data).execute()
+      supabase.table("baby_logs").insert(data).execute()
       st.success("Saved successfully!")
       st.rerun()
     except Exception as e:
@@ -52,7 +51,7 @@ st.subheader("Activity Timeline")
 try:
   response = (
       supabase.table("baby_logs")
-      .select("id, type, created_by_caregiver, note, start_date_time")
+      .select("*")
       .order("start_date_time", desc=True)
       .limit(20)
       .execute()
