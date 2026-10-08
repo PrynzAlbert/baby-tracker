@@ -27,27 +27,23 @@ with st.form("activity_form", clear_on_submit=True):
   caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
   note = st.text_area("Note / Details")
 
-  submitted = st.form_submit_button("Save Entry")
-
-  if submitted:
+    if submitted:
     now_utc = datetime.now()
     data = {
         "type": activity_type,
-        "profile_name": profile_name,
         "created_by_caregiver": caregiver,
-        "last_updated_by_caregiver": caregiver,
         "note": note,
         "start_date_time": now_utc.isoformat(),
-        "start_date_time_epoch": int(now_utc.timestamp() * 1000),
     }
 
-    supabase.table("baby_logs").insert(data).execute()
-    st.success("Saved successfully!")
-    st.rerun()
+    try:
+      response = supabase.table("baby_logs").insert(data).execute()
+      st.success("Saved successfully!")
+      st.rerun()
+    except Exception as e:
+      # This will print the raw database error on your screen so we can see the exact cause
+      st.error(f"Detailed Database Error: {e}")
 
-# Timeline View
-st.divider()
-st.subheader("Activity Timeline")
 
 try:
   response = (
