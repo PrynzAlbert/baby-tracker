@@ -1,4 +1,35 @@
-if submitted:
+from datetime import datetime
+import streamlit as st
+from supabase import create_client
+
+st.set_page_config(
+    page_title="Baby Tracker", page_icon="👶", layout="centered"
+)
+
+
+@st.cache_resource
+def init_supabase():
+  return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+
+supabase = init_supabase()
+
+st.title("👶 Nara-Synced Baby Tracker")
+
+# Input Form
+with st.form("activity_form", clear_on_submit=True):
+  st.subheader("Log New Event")
+
+  activity_type = st.selectbox(
+      "Activity Type", ["bottle_feed", "sleep", "diaper", "solid_feed", "note"]
+  )
+  profile_name = st.selectbox("Baby Profile", ["Baby"])
+  caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+  note = st.text_area("Note / Details")
+
+  submitted = st.form_submit_button("Save Entry")
+
+  if submitted:
     now_utc = datetime.now()
     data = {
         "type": activity_type,
@@ -8,12 +39,8 @@ if submitted:
     }
 
     try:
-      # Explicitly targeting the public schema
       response = (
-          supabase.schema("public")
-          .table("baby_logs")
-          .insert(data)
-          .execute()
+          supabase.schema("public").table("baby_logs").insert(data).execute()
       )
       st.success("Saved successfully!")
       st.rerun()
@@ -25,7 +52,6 @@ st.divider()
 st.subheader("Activity Timeline")
 
 try:
-  # Explicitly targeting the public schema here too
   response = (
       supabase.schema("public")
       .table("baby_logs")
