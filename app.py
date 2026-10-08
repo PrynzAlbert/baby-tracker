@@ -280,7 +280,6 @@ else:
   st.subheader("📈 Trends & Analytics")
 
   try:
-    # Fetch recent logs for charting (last 100 entries)
     chart_res = (
         supabase.schema("public")
         .table("baby_logs")
@@ -293,15 +292,11 @@ else:
 
     if raw_logs:
       df = pd.DataFrame(raw_logs)
-      # Convert timestamps to date strings for grouping
       df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
 
-      # Group by date and activity type counts
       activity_counts = (
           df.groupby(["date", "type"]).size().reset_index(name="count")
       )
-      
-      # Pivot table to make columns for bar chart
       chart_data = activity_counts.pivot(
           index="date", columns="type", values="count"
       ).fillna(0)
@@ -357,5 +352,5 @@ else:
     else:
       st.info("No activities logged in the database yet. Record your first entry above!")
 
-except Exception as e:
-    st.error(f"Timeline Error: {e}")
+  except Exception as e:
+      st.error(f"Timeline Error: {e}")
