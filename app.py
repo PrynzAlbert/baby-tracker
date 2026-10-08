@@ -9,19 +9,15 @@ st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
-# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS & WHITE-ON-WHITE FIXES ---
+# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #2D3748; }
     h1, h2, h3, h4 { color: #1A365D !important; }
     
-    /* Fix radio button visibility */
     .stRadio label { color: #1A365D !important; font-weight: 700 !important; font-size: 1.1rem !important; }
-    
-    /* Fix input fields, text areas, and selectboxes text/background color */
     input, textarea { color: #2D3748 !important; background-color: #FFFFFF !important; border: 1px solid #CBD5E0 !important; border-radius: 8px !important; }
     
-    /* Fix selectbox internal text and background */
     .stSelectbox div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
         color: #2D3748 !important;
@@ -30,7 +26,6 @@ st.markdown("""
     }
     .stSelectbox span { color: #2D3748 !important; }
     
-    /* Fix dropdown popover list items */
     div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
         background-color: #FFFFFF !important;
         color: #2D3748 !important;
@@ -40,12 +35,10 @@ st.markdown("""
         color: #1A365D !important;
     }
 
-    /* Buttons */
     .stButton>button { background-color: #4299E1; color: white; border-radius: 12px; border: none; font-weight: 600; padding: 0.5rem 1rem; }
     .stButton>button:hover { background-color: #3182CE; color: white; }
     .stFormSubmitButton>button { background-color: #48BB78; color: white; border-radius: 12px; border: none; font-weight: 600; width: 100%; }
     
-    /* Metric Cards */
     div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0; }
     div[data-testid="stMetric"] label { color: #4A5568 !important; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #2B6CB0 !important; }
@@ -59,27 +52,29 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# Session State Auth Init
+# Session State Init
 if "user" not in st.session_state:
     st.session_state.user = None
-
-# Default active caregiver profile
-if "current_caregiver" not in st.session_state:
-    st.session_state.current_caregiver = "Albert"
+if "profile" not in st.session_state:
+    st.session_state.profile = None
 
 try:
     session = supabase.auth.get_session()
     if session and session.user:
         st.session_state.user = session.user
+        # Fetch profile data
+        profile_res = supabase.schema("public").table("profiles").select("*").eq("id", session.user.id).execute()
+        if profile_res.data:
+            st.session_state.profile = profile_res.data[0]
 except:
     pass
 
-# --- AUTHENTICATION GATE ---
-if not st.session_state.user:
+# --- AUTHENTICATION & REGISTRATION GATE ---
+if not st.session_state.user or not st.session_state.profile:
     st.title("🍼 Smart Baby")
-    st.caption("Sign in to access your secure family tracker.")
+    st.caption("Sign in or register your family tracking profile.")
     
-    tab_login, tab_signup = st.tabs(["Sign In", "Register"])
+    tab_login, tab_signup = st.tabs(["Sign In", "Register Profile"])
     
     with tab_login:
         with st.form("login_form"):
@@ -90,52 +85,77 @@ if not st.session_state.user:
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if res.user:
                         st.session_state.user = res.user
-                        st.rerun()
+                        p_res = supabase.schema("public").table("profiles").select("*").eq("id", res.user.id).execute()
+                        if p_res.data:
+                            st.session_state.profile = p_res.data[0]
+                            st.rerun()
+                        else:
+                            st.warning("Signed in, but profile details missing. Please register profile details.")
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
     with tab_signup:
         with st.form("signup_form"):
-            new_email = st.text_input("Email", key="su_email")
-            new_password = st.text_input("Password", type="password", key="su_pass")
-            if st.form_submit_button("Create Account", use_container_width=True):
-                try:
-                    supabase.auth.sign_up({"email": new_email, "password": new_password})
-                    st.success("Account created! You can now sign in.")
-                except Exception as e:
-                    st.error(f"Sign up failed: {e}")
+            reg_email = st.text_input("Email", key="su_email")
+            reg_password = st.text_input("Password", type="password", key="su_pass")
+            st.divider()
+            caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
+            baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
+            baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
+            
+            if st.form_submit_button("Create Account & Profile", use_container_width=True):
+                if not caregiver_name or not baby_name:
+                    st.error("Please fill in your username and baby's name.")
+                else:
+                    try:
+                        # 1. Sign up user auth
+                        auth_res = supabase.auth.sign_up({"email": reg_email, "password": reg_password})
+                        if auth_res.user:
+                            user_id = auth_res.user.id
+                            # 2. Insert profile record
+                            profile_data = {
+                                "id": user_id,
+                                "caregiver_name": caregiver_name,
+                                "baby_name": baby_name,
+                                "baby_dob": str(baby_dob)
+                            }
+                            supabase.schema("public").table("profiles").insert(profile_data).execute()
+                            st.success("Account & profile created successfully! You can now sign in.")
+                    except Exception as e:
+                        st.error(f> "Registration failed: {e}")
 
 else:
-    # --- MAIN APP ---
-    user_email = st.session_state.user.email
+    # --- MAIN APP (Authenticated & Profile Loaded) ---
+    profile = st.session_state.profile
+    current_caregiver = profile.get("caregiver_name", "Caregiver")
+    baby_name = profile.get("baby_name", "Baby")
+    baby_dob_str = profile.get("baby_dob")
+
+    # Calculate baby's age
+    age_text = ""
+    if baby_dob_str:
+        dob = datetime.strptime(baby_dob_str, "%Y-%m-%d").date()
+        days_old = (datetime.now().date() - dob).days
+        if days_old < 30:
+            age_text = f"{days_old} days old"
+        elif days_old < 365:
+            age_text = f"{round(days_old / 30, 1)} months old"
+        else:
+            age_text = f"{round(days_old / 365, 1)} years old"
 
     with st.sidebar:
-        st.write(f"Signed in as:\n**{user_email}**")
-        st.divider()
-        
-        # --- CAREGIVER SELECTOR / CUSTOMIZER ---
-        st.subheader("👤 Active Caregiver")
-        available_caregivers = ["Albert", "Partner", "Nanny", "Custom..."]
-        selected_cg_option = st.selectbox("Who is logging right now?", available_caregivers, index=available_caregivers.index(st.session_state.current_caregiver) if st.session_state.current_caregiver in available_caregivers else 3)
-        
-        if selected_cg_option == "Custom...":
-            custom_name = st.text_input("Enter your preferred name:", value=st.session_state.current_caregiver)
-            if custom_name:
-                st.session_state.current_caregiver = custom_name
-        else:
-            st.session_state.current_caregiver = selected_cg_option
-            
-        st.info(f"Current logs will be saved under: **{st.session_state.current_caregiver}**")
-        
+        st.write(f"Signed in as:\n**{current_caregiver}**")
+        st.caption(f"Baby: **{baby_name}** ({age_text})")
         st.divider()
         if st.button("Log Out", use_container_width=True):
             try: supabase.auth.sign_out()
             except: pass
             st.session_state.user = None
+            st.session_state.profile = None
             st.rerun()
 
-    st.title("🍼 Smart Baby")
-    st.caption(f"Welcome back, **{st.session_state.current_caregiver}**! Tracking live for baby.")
+    st.title(f"🍼 {baby_name}'s Tracker")
+    st.caption(f"Welcome back, **{current_caregiver}**! Tracking live.")
 
     # --- TODAY'S SUMMARY METRICS ---
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -169,20 +189,20 @@ else:
         def save_log(act_type, note_text, start_time=None):
             data = {
                 "type": act_type,
-                "created_by_caregiver": st.session_state.current_caregiver,
+                "created_by_caregiver": current_caregiver,
                 "note": note_text,
                 "start_date_time": (start_time or datetime.now()).isoformat()
             }
             try:
                 supabase.schema("public").table("baby_logs").insert(data).execute()
-                st.success(f"{act_type} saved by {st.session_state.current_caregiver}!")
+                st.success(f"{act_type} saved by {current_caregiver}!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
         if action == "Feed":
             with st.form("feed_form", clear_on_submit=True):
-                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
+                st.write(f"Logging as: **{current_caregiver}**")
                 ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
                 amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
                 note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
@@ -192,7 +212,7 @@ else:
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
-            st.write(f"Logging as: **{st.session_state.current_caregiver}**")
+            st.write(f"Logging as: **{current_caregiver}**")
             
             if not st.session_state.sleep_active:
                 mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
@@ -223,7 +243,7 @@ else:
 
         elif action == "Diaper":
             with st.form("diaper_form", clear_on_submit=True):
-                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
+                st.write(f"Logging as: **{current_caregiver}**")
                 status = st.selectbox("Status", ["Wet", "Dirty", "Both"])
                 note = st.text_area("Extra Notes", placeholder="e.g., minor rash, heavy wet...")
                 if st.form_submit_button("Save Diaper"):
@@ -232,7 +252,7 @@ else:
 
         elif action == "Note":
             with st.form("note_form", clear_on_submit=True):
-                st.write(f"Logging as: **{st.session_state.current_caregiver}**")
+                st.write(f"Logging as: **{current_caregiver}**")
                 note = st.text_area("Details", placeholder="Enter milestone, mood, or health note...")
                 if st.form_submit_button("Save Note"):
                     save_log("Note", note)
