@@ -9,436 +9,214 @@ st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
-# --- CUSTOM BRIGHT LIGHT THEME CSS ---
+# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS ---
 st.markdown("""
     <style>
-    /* Main background & text color */
-    .stApp {
-        background-color: #F8F9FA;
-        color: #2D3748;
-    }
+    .stApp { background-color: #F8F9FA; color: #2D3748; }
+    h1, h2, h3, h4 { color: #1A365D !important; }
     
-    /* Headers */
-    h1, h2, h3, h4, h5, h6 {
-        color: #1A365D !important;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
+    /* Fix radio button visibility on mobile */
+    .stRadio label { color: #1A365D !important; font-weight: 700 !important; font-size: 1.1rem !important; }
+    
+    /* Buttons */
+    .stButton>button { background-color: #4299E1; color: white; border-radius: 12px; border: none; font-weight: 600; padding: 0.5rem 1rem; }
+    .stButton>button:hover { background-color: #3182CE; color: white; }
+    .stFormSubmitButton>button { background-color: #48BB78; color: white; border-radius: 12px; border: none; font-weight: 600; width: 100%; }
+    
+    /* Inputs */
+    input, textarea, select { border-radius: 8px !important; border: 1px solid #CBD5E0 !important; background-color: #FFFFFF !important; }
 
-    /* Cards / Containers styling */
-    div.stMarkdown {
-        color: #2D3748;
-    }
-
-    /* Buttons styling */
-    .stButton>button {
-        background-color: #4299E1;
-        color: white;
-        border-radius: 12px;
-        border: none;
-        font-weight: 600;
-        padding: 0.5rem 1rem;
-        box-shadow: 0 2px 4px rgba(66, 153, 225, 0.2);
-    }
-    .stButton>button:hover {
-        background-color: #3182CE;
-        color: white;
-    }
-
-    /* Form submit buttons */
-    .stFormSubmitButton>button {
-        background-color: #48BB78;
-        color: white;
-        border-radius: 12px;
-        border: none;
-        font-weight: 600;
-        width: 100%;
-    }
-    .stFormSubmitButton>button:hover {
-        background-color: #38A169;
-        color: white;
-    }
-
-    /* Input Fields */
-    input, textarea, select {
-        border-radius: 8px !important;
-        border: 1px solid #E2E8F0 !important;
-        background-color: #FFFFFF !important;
-    }
-
-    /* Metric cards */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        padding: 15px;
-        border-radius: 14px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        border: 1px solid #EDF2F7;
-    }
-    div[data-testid="stMetric"] label {
-        color: #718096 !important;
-    }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-        color: #2B6CB0 !important;
-    }
-
-    /* Tabs styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #EDF2F7;
-        border-radius: 8px;
-        color: #4A5568;
-        padding: 8px 16px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #4299E1 !important;
-        color: white !important;
-    }
+    /* Metric Cards */
+    div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0; }
+    div[data-testid="stMetric"] label { color: #4A5568 !important; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #2B6CB0 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-
-# Initialize Supabase Connection
+# Initialize Supabase
 @st.cache_resource
 def init_supabase():
-  return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_supabase()
 
-# Initialize session state for user auth
+# Session State Auth Init
 if "user" not in st.session_state:
-  st.session_state.user = None
+    st.session_state.user = None
 
-# Check existing session
 try:
-  session = supabase.auth.get_session()
-  if session and session.user:
-    st.session_state.user = session.user
+    session = supabase.auth.get_session()
+    if session and session.user:
+        st.session_state.user = session.user
 except:
-  pass
+    pass
 
 # --- AUTHENTICATION GATE ---
 if not st.session_state.user:
-  st.title("🍼 Smart Baby")
-  st.caption("Please sign in or create an account to access the tracker.")
+    st.title("🍼 Smart Baby")
+    st.caption("Sign in to access your secure family tracker.")
+    
+    tab_login, tab_signup = st.tabs(["Sign In", "Register"])
+    
+    with tab_login:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Sign In", use_container_width=True):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    if res.user:
+                        st.session_state.user = res.user
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Login failed: {e}")
 
-  tab_login, tab_signup = st.tabs(["Sign In", "Register"])
-
-  with tab_login:
-    with st.form("login_form"):
-      email = st.text_input("Email")
-      password = st.text_input("Password", type="password")
-      submit_login = st.form_submit_button("Sign In", use_container_width=True)
-
-      if submit_login:
-        try:
-          res = supabase.auth.sign_in_with_password(
-              {"email": email, "password": password}
-          )
-          if res.user:
-            st.session_state.user = res.user
-            st.success("Signed in successfully!")
-            st.rerun()
-        except Exception as e:
-          st.error(f"Login failed: {e}")
-
-  with tab_signup:
-    with st.form("signup_form"):
-      new_email = st.text_input("Email", key="signup_email")
-      new_password = st.text_input("Password", type="password", key="signup_pass")
-      submit_signup = st.form_submit_button("Create Account", use_container_width=True)
-
-      if submit_signup:
-        try:
-          res = supabase.auth.sign_up(
-              {"email": new_email, "password": new_password}
-          )
-          if res.user:
-            st.success("Account created successfully! You can now sign in.")
-        except Exception as e:
-          st.error(f"Sign up failed: {e}")
+    with tab_signup:
+        with st.form("signup_form"):
+            new_email = st.text_input("Email", key="su_email")
+            new_password = st.text_input("Password", type="password", key="su_pass")
+            if st.form_submit_button("Create Account", use_container_width=True):
+                try:
+                    supabase.auth.sign_up({"email": new_email, "password": new_password})
+                    st.success("Account created! You can now sign in.")
+                except Exception as e:
+                    st.error(f"Sign up failed: {e}")
 
 else:
-  # --- MAIN APP (Authenticated) ---
+    # --- MAIN APP ---
+    with st.sidebar:
+        st.write(f"Signed in as:\n**{st.session_state.user.email}**")
+        if st.button("Log Out", use_container_width=True):
+            try: supabase.auth.sign_out()
+            except: pass
+            st.session_state.user = None
+            st.rerun()
 
-  # Sidebar for Caregiver Info & Logout
-  with st.sidebar:
-    st.write(f"Signed in as:\n**{st.session_state.user.email}**")
-    if st.button("Log Out", use_container_width=True):
-      try:
-        supabase.auth.sign_out()
-      except:
+    st.title("🍼 Smart Baby")
+
+    # --- TODAY'S SUMMARY METRICS ---
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    try:
+        dash_res = supabase.schema("public").table("baby_logs").select("type, note, start_date_time").gte("start_date_time", f"{today_str}T00:00:00").execute()
+        today_logs = dash_res.data or []
+        
+        feeds = sum(1 for l in today_logs if l.get("type") == "Feed")
+        diapers = sum(1 for l in today_logs if l.get("type") == "Diaper")
+        sleep_mins = sum(int(l["note"].split("Slept for ")[1].split(" minutes")[0]) for l in today_logs if l.get("type") == "Sleep" and "Slept for" in l.get("note", ""))
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("💤 Sleep", f"{round(sleep_mins/60, 1)}h")
+        c2.metric("🍼 Feeds", feeds)
+        c3.metric("🧷 Diapers", diapers)
+    except:
         pass
-      st.session_state.user = None
-      st.rerun()
 
-  # App Header
-  st.title("🍼 Smart Baby")
-  st.caption("Your lightweight daily companion for tracking baby activities.")
+    st.divider()
 
-  # --- SUMMARY DASHBOARD (TODAY'S STATS) ---
-  st.subheader("📊 Today's Summary")
-  today_str = datetime.now().strftime("%Y-%m-%d")
+    # --- MAIN APP TABS ---
+    tab_track, tab_analytics = st.tabs(["📝 Track & Log", "📊 History & Trends"])
 
-  try:
-    dash_response = (
-        supabase.schema("public")
-        .table("baby_logs")
-        .select("type, note, start_date_time")
-        .gte("start_date_time", f"{today_str}T00:00:00")
-        .execute()
-    )
-    today_logs = dash_response.data or []
-
-    total_feeds = sum(1 for log in today_logs if log.get("type") == "Feed")
-    total_diapers = sum(1 for log in today_logs if log.get("type") == "Diaper")
-
-    total_sleep_mins = 0
-    for log in today_logs:
-      if log.get("type") == "Sleep":
-        note_text = log.get("note", "")
-        if "Slept for" in note_text:
-          try:
-            parts = note_text.split("Slept for ")[1].split(" minutes")
-            total_sleep_mins += int(parts[0])
-          except:
-            pass
-
-    sleep_hours = round(total_sleep_mins / 60, 1)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("💤 Sleep Today", f"{sleep_hours} hrs")
-    col2.metric("🍼 Feeds", f"{total_feeds}")
-    col3.metric("🧷 Diapers", f"{total_diapers}")
-
-  except Exception as e:
-    st.info("Log metrics will appear here once activities are recorded.")
-
-  st.divider()
-
-  # Initialize session state for sleep timer
-  if "sleep_active" not in st.session_state:
-    st.session_state.sleep_active = False
-    st.session_state.sleep_start_time = None
-    st.session_state.sleep_caregiver = "Albert"
-
-  # Quick Action Selector
-  action = st.radio(
-      "Select Activity",
-      ["Feed", "Sleep", "Diaper", "Note"],
-      horizontal=True,
-  )
-
-  # --- FEED FORM ---
-  if action == "Feed":
-    with st.form("feed_form", clear_on_submit=True):
-      st.subheader("Log: Feed")
-      caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="feed_cg")
-      feed_type = st.selectbox("Feed Type", ["Breast Milk", "Formula", "Solid"])
-      amount = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
-      note = st.text_area("Extra Notes", value=f"{feed_type} - {amount}ml" if amount > 0 else feed_type)
-
-      if st.form_submit_button("Save Feed", use_container_width=True):
-        data = {
-            "type": "Feed",
-            "created_by_caregiver": caregiver,
-            "note": note,
-            "start_date_time": datetime.now().isoformat(),
-        }
-        try:
-          supabase.schema("public").table("baby_logs").insert(data).execute()
-          st.success("Feed saved to database!")
-          st.rerun()
-        except Exception as e:
-          st.error(f"Database Error: {e}")
-
-  # --- SLEEP TIMER SECTION ---
-  elif action == "Sleep":
-    st.subheader("💤 Sleep Tracker")
-    caregiver = st.selectbox("Caregiver (Handoff)", ["Albert", "Partner", "Nanny"], key="sleep_cg")
-
-    if not st.session_state.sleep_active:
-      st.info("No sleep timer currently running.")
-
-      mode = st.radio("Start Mode", ["Start Now", "Add Past Start Time (Forgot to start)"], horizontal=True)
-
-      past_time = None
-      if mode == "Add Past Start Time (Forgot to start)":
-        col1, col2 = st.columns(2)
-        with col1:
-          sleep_date = st.date_input("Start Date", datetime.now().date())
-        with col2:
-          sleep_time = st.time_input("Start Time", (datetime.now() - timedelta(hours=1)).time())
-        past_time = datetime.combine(sleep_date, sleep_time)
-
-      if st.button("🚀 Start Sleep Timer", use_container_width=True):
-        st.session_state.sleep_active = True
-        st.session_state.sleep_start_time = past_time if past_time else datetime.now()
-        st.session_state.sleep_caregiver = caregiver
-        st.success("Sleep timer started!")
-        st.rerun()
-    else:
-      st.warning(f"🔴 **Baby is sleeping!** Started by **{st.session_state.sleep_caregiver}** at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
-      timer_placeholder = st.empty()
-
-      col1, col2 = st.columns(2)
-      with col1:
-        if st.button("Stop & Save Sleep", type="primary", use_container_width=True):
-          end_time = datetime.now()
-          duration_mins = int((end_time - st.session_state.sleep_start_time).total_seconds() / 60)
-          note = f"Slept for {duration_mins} minutes (Started: {st.session_state.sleep_start_time.strftime('%H:%M')}, Ended: {end_time.strftime('%H:%M')})"
-
-          data = {
-              "type": "Sleep",
-              "created_by_caregiver": caregiver,
-              "note": note,
-              "start_date_time": st.session_state.sleep_start_time.isoformat(),
-          }
-          try:
-            supabase.schema("public").table("baby_logs").insert(data).execute()
+    with tab_track:
+        if "sleep_active" not in st.session_state:
             st.session_state.sleep_active = False
             st.session_state.sleep_start_time = None
-            st.success("Sleep session saved to database!")
-            st.rerun()
-          except Exception as e:
-            st.error(f"Database Error: {e}")
 
-      with col2:
-        if st.button("Cancel Timer", use_container_width=True):
-          st.session_state.sleep_active = False
-          st.session_state.sleep_start_time = None
-          st.rerun()
+        action = st.radio("Select Activity", ["Feed", "Sleep", "Diaper", "Note"], horizontal=True)
 
-      for _ in range(5):
-        if not st.session_state.sleep_active:
-          break
-        elapsed_seconds = int((datetime.now() - st.session_state.sleep_start_time).total_seconds())
-        hours, remainder = divmod(elapsed_seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        timer_placeholder.metric("Current Duration", f"{hours}h {minutes}m {seconds}s")
-        time.sleep(1)
-      st.rerun()
+        def save_log(act_type, note_text, caregiver="Albert", start_time=None):
+            data = {
+                "type": act_type,
+                "created_by_caregiver": caregiver,
+                "note": note_text,
+                "start_date_time": (start_time or datetime.now()).isoformat()
+            }
+            try:
+                supabase.schema("public").table("baby_logs").insert(data).execute()
+                st.success(f"{act_type} saved successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-  # --- DIAPER FORM ---
-  elif action == "Diaper":
-    with st.form("diaper_form", clear_on_submit=True):
-      st.subheader("Log: Diaper")
-      caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="diaper_cg")
-      diaper_status = st.selectbox("Type", ["Wet", "Dirty", "Both"])
-      note = st.text_area("Extra Notes", value=f"Diaper: {diaper_status}")
+        if action == "Feed":
+            with st.form("feed_form", clear_on_submit=True):
+                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+                ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
+                amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
+                note = st.text_area("Notes", value=f"{ftype} - {amt}ml" if amt > 0 else ftype)
+                if st.form_submit_button("Save Feed"):
+                    save_log("Feed", note, cg)
 
-      if st.form_submit_button("Save Diaper", use_container_width=True):
-        data = {
-            "type": "Diaper",
-            "created_by_caregiver": caregiver,
-            "note": note,
-            "start_date_time": datetime.now().isoformat(),
-        }
+        elif action == "Sleep":
+            st.subheader("💤 Sleep Tracker")
+            cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="sl_cg")
+            
+            if not st.session_state.sleep_active:
+                mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
+                past_t = None
+                if mode == "Add Past Start Time":
+                    d = st.date_input("Date", datetime.now().date())
+                    t = st.time_input("Time", (datetime.now() - timedelta(hours=1)).time())
+                    past_t = datetime.combine(d, t)
+
+                if st.button("🚀 Start Sleep Timer", use_container_width=True):
+                    st.session_state.sleep_active = True
+                    st.session_state.sleep_start_time = past_t or datetime.now()
+                    st.rerun()
+            else:
+                st.warning(f"🔴 Sleeping! Started at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Stop & Save", type="primary", use_container_width=True):
+                        end_t = datetime.now()
+                        mins = int((end_t - st.session_state.sleep_start_time).total_seconds() / 60)
+                        note = f"Slept for {mins} minutes ({st.session_state.sleep_start_time.strftime('%H:%M')} - {end_t.strftime('%H:%M')})"
+                        save_log("Sleep", note, cg, st.session_state.sleep_start_time)
+                        st.session_state.sleep_active = False
+                with col2:
+                    if st.button("Cancel", use_container_width=True):
+                        st.session_state.sleep_active = False
+                        st.rerun()
+
+        elif action == "Diaper":
+            with st.form("diaper_form", clear_on_submit=True):
+                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+                status = st.selectbox("Status", ["Wet", "Dirty", "Both"])
+                if st.form_submit_button("Save Diaper"):
+                    save_log("Diaper", f"Diaper: {status}", cg)
+
+        elif action == "Note":
+            with st.form("note_form", clear_on_submit=True):
+                cg = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"])
+                note = st.text_area("Details")
+                if st.form_submit_button("Save Note"):
+                    save_log("Note", note, cg)
+
+    with tab_analytics:
+        st.subheader("📈 Trends & Timeline")
         try:
-          supabase.schema("public").table("baby_logs").insert(data).execute()
-          st.success("Diaper logged to database!")
-          st.rerun()
-        except Exception as e:
-          st.error(f"Database Error: {e}")
+            chart_res = supabase.schema("public").table("baby_logs").select("type, start_date_time").order("start_date_time", desc=False).limit(100).execute()
+            if chart_res.data:
+                df = pd.DataFrame(chart_res.data)
+                df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
+                chart_data = df.groupby(["date", "type"]).size().unstack(fill_value=0)
+                st.bar_chart(chart_data)
+        except:
+            st.info("Analytics will appear once data is logged.")
 
-  # --- NOTE FORM ---
-  elif action == "Note":
-    with st.form("note_form", clear_on_submit=True):
-      st.subheader("Log: Note")
-      caregiver = st.selectbox("Caregiver", ["Albert", "Partner", "Nanny"], key="note_cg")
-      note = st.text_area("Details")
-
-      if st.form_submit_button("Save Note", use_container_width=True):
-        data = {
-            "type": "Note",
-            "created_by_caregiver": caregiver,
-            "note": note,
-            "start_date_time": datetime.now().isoformat(),
-        }
+        st.divider()
+        st.subheader("Recent Activity History")
         try:
-          supabase.schema("public").table("baby_logs").insert(data).execute()
-          st.success("Note saved to database!")
-          st.rerun()
+            res = supabase.schema("public").table("baby_logs").select("*").order("start_date_time", desc=True).limit(20).execute()
+            for log in (res.data or []):
+                col_i, col_d = st.columns([5, 1])
+                with col_i:
+                    st.markdown(f"**{log.get('type').upper()}** — *{log.get('created_by_caregiver')}*")
+                    if log.get('note'): st.write(f"📝 {log.get('note')}")
+                    st.caption(f"{log.get('start_date_time', '').replace('T', ' ')[:16]}")
+                with col_d:
+                    if st.button("❌", key=f"del_{log.get('id')}"):
+                        supabase.schema("public").table("baby_logs").delete().eq("id", log.get('id')).execute()
+                        st.rerun()
+                st.write("---")
         except Exception as e:
-          st.error(f"Database Error: {e}")
-
-  # --- ANALYTICS & CHARTS SECTION ---
-  st.divider()
-  st.subheader("📈 Trends & Analytics")
-
-  try:
-    chart_res = (
-        supabase.schema("public")
-        .table("baby_logs")
-        .select("type, start_date_time")
-        .order("start_date_time", desc=False)
-        .limit(100)
-        .execute()
-    )
-    raw_logs = chart_res.data or []
-
-    if raw_logs:
-      df = pd.DataFrame(raw_logs)
-      df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
-
-      activity_counts = (
-          df.groupby(["date", "type"]).size().reset_index(name="count")
-      )
-      chart_data = activity_counts.pivot(
-          index="date", columns="type", values="count"
-      ).fillna(0)
-
-      st.markdown("##### Activity Breakdown Over Time")
-      st.bar_chart(chart_data)
-    else:
-      st.info("Charts will populate once you record a few activities!")
-  except Exception as e:
-    st.info("Analytics loading...")
-
-  # --- ACTIVITY TIMELINE VIEW ---
-  st.divider()
-  st.subheader("Recent Activity")
-
-  try:
-    response = (
-        supabase.schema("public")
-        .table("baby_logs")
-        .select("id, type, created_by_caregiver, note, start_date_time")
-        .order("start_date_time", desc=True)
-        .limit(25)
-        .execute()
-    )
-    logs = response.data
-
-    if logs:
-      for log in logs:
-        log_id = log.get("id")
-        act_type = log.get("type", "Activity")
-        caregiver = log.get("created_by_caregiver", "Unknown")
-        note_text = log.get("note", "")
-        time_raw = log.get("start_date_time")
-        
-        time_str = time_raw.replace("T", " ")[:16] if time_raw else "Unknown time"
-
-        with st.container():
-          col_info, col_del = st.columns([5, 1])
-
-          with col_info:
-            st.markdown(f"**{str(act_type).upper()}** — *{caregiver}*")
-            if note_text:
-              st.write(f"📝 {note_text}")
-            st.caption(f"Logged at {time_str}")
-
-          with col_del:
-            if st.button("Delete", key=f"del_{log_id}"):
-              supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
-              st.success("Deleted!")
-              st.rerun()
-
-          st.write("---")
-    else:
-      st.info("No activities logged in the database yet. Record your first entry above!")
-
-  except Exception as e:
-      st.error(f"Timeline Error: {e}")
+            st.error(f"Error loading history: {e}")
