@@ -9,39 +9,52 @@ st.set_page_config(
     page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
 )
 
-# --- CUSTOM BRIGHT MOBILE-FRIENDLY CSS ---
+# --- HIGH-CONTRAST DARK MOBILE THEME CSS ---
 st.markdown("""
     <style>
-    .stApp { background-color: #F8F9FA; color: #2D3748; }
-    h1, h2, h3, h4 { color: #1A365D !important; }
+    /* Deep Slate Background & High Contrast White Text */
+    .stApp { background-color: #0F172A; color: #F8FAFC; }
+    h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
     
-    .stRadio label { color: #1A365D !important; font-weight: 700 !important; font-size: 1.1rem !important; }
-    input, textarea { color: #2D3748 !important; background-color: #FFFFFF !important; border: 1px solid #CBD5E0 !important; border-radius: 8px !important; }
+    /* Labels, Captions & Text */
+    p, label, span, .stMarkdown { color: #E2E8F0 !important; }
     
+    /* Input Fields & Text Areas */
+    input, textarea { color: #FFFFFF !important; background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 8px !important; }
+    
+    /* Selectboxes */
     .stSelectbox div[data-baseweb="select"] {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
+        background-color: #1E293B !important;
+        color: #FFFFFF !important;
         border-radius: 8px !important;
-        border: 1px solid #CBD5E0 !important;
+        border: 1px solid #475569 !important;
     }
-    .stSelectbox span { color: #2D3748 !important; }
+    .stSelectbox span { color: #FFFFFF !important; }
     
+    /* Dropdown menus */
     div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
+        background-color: #1E293B !important;
+        color: #FFFFFF !important;
     }
     div[data-baseweb="menu"] div:hover {
-        background-color: #EDF2F7 !important;
-        color: #1A365D !important;
+        background-color: #334155 !important;
+        color: #38BDF8 !important;
     }
 
-    .stButton>button { background-color: #4299E1; color: white; border-radius: 12px; border: none; font-weight: 600; padding: 0.5rem 1rem; }
-    .stButton>button:hover { background-color: #3182CE; color: white; }
-    .stFormSubmitButton>button { background-color: #48BB78; color: white; border-radius: 12px; border: none; font-weight: 600; width: 100%; }
+    /* Radio buttons */
+    .stRadio label { color: #F8FAFC !important; font-weight: 600 !important; }
+
+    /* Action Buttons */
+    .stButton>button { background-color: #38BDF8; color: #0F172A; border-radius: 12px; border: none; font-weight: 700; padding: 0.5rem 1rem; width: 100%; }
+    .stButton>button:hover { background-color: #0EA5E9; color: #FFFFFF; }
     
-    div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0; }
-    div[data-testid="stMetric"] label { color: #4A5568 !important; }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #2B6CB0 !important; }
+    .stFormSubmitButton>button { background-color: #22C55E; color: #FFFFFF; border-radius: 12px; border: none; font-weight: 700; width: 100%; padding: 0.6rem; }
+    .stFormSubmitButton>button:hover { background-color: #16A34A; }
+    
+    /* Metric Cards */
+    div[data-testid="stMetric"] { background-color: #1E293B; padding: 12px; border-radius: 12px; border: 1px solid #334155; }
+    div[data-testid="stMetric"] label { color: #94A3B8 !important; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -68,59 +81,18 @@ try:
 except:
     pass
 
-# --- AUTHENTICATION & REGISTRATION GATE ---
-if not st.session_state.user or not st.session_state.profile:
+# --- AUTHENTICATION & MULTI-STEP PROFILE SETUP GATE ---
+if not st.session_state.user:
     st.title("🍼 Smart Baby")
-    st.caption("Register your family profile or sign in to your account.")
+    st.caption("Sign in or create your account to begin.")
     
-    tab_signup, tab_login = st.tabs(["Register Profile", "Sign In"])
+    tab_login, tab_signup = st.tabs(["Sign In", "Register Email"])
     
-    with tab_signup:
-        with st.form("signup_form"):
-            reg_email = st.text_input("Email", key="su_email")
-            reg_password = st.text_input("Password", type="password", key="su_pass")
-            st.divider()
-            caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
-            
-            mode_reg = st.radio("Setup Type", ["Create New Baby Profile", "Join Existing Family (Partner)"])
-            
-            baby_name = ""
-            baby_dob = datetime.now().date()
-            family_code = ""
-
-            if mode_reg == "Create New Baby Profile":
-                baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
-                baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
-            else:
-                family_code = st.text_input("Family Invite Code (from your partner)", placeholder="Paste family UUID code here...")
-            
-            if st.form_submit_button("Create Account & Connect", use_container_width=True):
-                if not caregiver_name or (mode_reg == "Create New Baby Profile" and not baby_name) or (mode_reg == "Join Existing Family (Partner)" and not family_code):
-                    st.error("Please fill in all required fields.")
-                else:
-                    try:
-                        meta_data = {"caregiver_name": caregiver_name}
-                        if mode_reg == "Create New Baby Profile":
-                            meta_data["baby_name"] = baby_name
-                            meta_data["baby_dob"] = str(baby_dob)
-                        else:
-                            meta_data["family_code"] = family_code
-
-                        auth_res = supabase.auth.sign_up({
-                            "email": reg_email,
-                            "password": reg_password,
-                            "options": {"data": meta_data}
-                        })
-                        if auth_res.user:
-                            st.success("Account created successfully! You can now switch to the 'Sign In' tab.")
-                    except Exception as e:
-                        st.error(f"Registration failed: {e}")
-
     with tab_login:
         with st.form("login_form"):
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
-            if st.form_submit_button("Sign In", use_container_width=True):
+            if st.form_submit_button("Sign In"):
                 try:
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if res.user:
@@ -128,11 +100,83 @@ if not st.session_state.user or not st.session_state.profile:
                         p_res = supabase.schema("public").table("profiles").select("*").eq("id", res.user.id).execute()
                         if p_res.data:
                             st.session_state.profile = p_res.data[0]
-                            st.rerun()
-                        else:
-                            st.warning("Signed in, but profile details were not found.")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Login failed: {e}")
+
+    with tab_signup:
+        with st.form("signup_form"):
+            reg_email = st.text_input("Email", key="su_email")
+            reg_password = st.text_input("Password", type="password", key="su_pass")
+            if st.form_submit_button("Continue to Profile Setup"):
+                if not reg_email or not reg_password:
+                    st.error("Please enter email and password.")
+                else:
+                    try:
+                        auth_res = supabase.auth.sign_up({"email": reg_email, "password": reg_password})
+                        if auth_res.user:
+                            st.session_state.user = auth_res.user
+                            st.success("Account created! Please complete your profile below.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Registration failed: {e}")
+
+# If authenticated via email but profile hasn't been filled out yet
+elif not st.session_state.profile:
+    st.title("👶 Setup Baby Profile")
+    st.caption("Almost done! Tell us a bit about your family.")
+    
+    with st.form("profile_setup_form"):
+        caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
+        setup_mode = st.radio("Family Setup", ["Create New Baby Profile", "Join Existing Family (Partner Code)"])
+        
+        baby_name = ""
+        baby_dob = datetime.now().date()
+        family_code = ""
+
+        if setup_mode == "Create New Baby Profile":
+            baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
+            baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
+        else:
+            family_code = st.text_input("Family Invite Code", placeholder="Paste partner's family code here...")
+
+        if st.form_submit_button("Complete Setup"):
+            if not caregiver_name or (setup_mode == "Create New Baby Profile" and not baby_name) or (setup_mode == "Join Existing Family (Partner Code)" and not family_code):
+                st.error("Please fill in all required details.")
+            else:
+                try:
+                    user_id = st.session_state.user.id
+                    assigned_family_id = None
+                    
+                    if setup_mode == "Join Existing Family (Partner Code)":
+                        # Look up existing family id from code
+                        match_res = supabase.schema("public").table("profiles").select("family_id, baby_name, baby_dob").eq("family_id", family_code).limit(1).execute()
+                        if match_res.data:
+                            assigned_family_id = match_res.data[0]["family_id"]
+                            baby_name = match_res.data[0]["baby_name"]
+                            baby_dob = match_res.data[0]["baby_dob"]
+                        else:
+                            st.error("Invalid family invite code. Please check with your partner.")
+                            st.stop()
+
+                    profile_data = {
+                        "id": user_id,
+                        "caregiver_name": caregiver_name,
+                        "baby_name": baby_name,
+                        "baby_dob": str(baby_dob)
+                    }
+                    if assigned_family_id:
+                        profile_data["family_id"] = assigned_family_id
+
+                    supabase.schema("public").table("profiles").insert(profile_data).execute()
+                    
+                    # Reload profile into session state
+                    p_res = supabase.schema("public").table("profiles").select("*").eq("id", user_id).execute()
+                    if p_res.data:
+                        st.session_state.profile = p_res.data[0]
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Profile creation failed: {e}")
 
 else:
     # --- MAIN APP (Authenticated & Profile Loaded) ---
@@ -142,7 +186,6 @@ else:
     baby_dob_str = profile.get("baby_dob")
     family_id = profile.get("family_id")
 
-    # Calculate baby's age
     age_text = ""
     if baby_dob_str:
         try:
@@ -165,10 +208,10 @@ else:
         st.divider()
         st.markdown("**Family Sharing Code:**")
         st.code(family_id, language="text")
-        st.caption("Share this code with your partner so they can join this baby's tracker upon registration.")
+        st.caption("Share this code with your partner so they can join this baby's tracker.")
         
         st.divider()
-        if st.button("Log Out", use_container_width=True):
+        if st.button("Log Out"):
             try: supabase.auth.sign_out()
             except: pass
             st.session_state.user = None
@@ -176,7 +219,7 @@ else:
             st.rerun()
 
     st.title(f"🍼 {baby_name}'s Tracker")
-    st.caption(f"Welcome back, **{current_caregiver}**! Tracking live with family.")
+    st.caption(f"Welcome back, **{current_caregiver}**!")
 
     # --- TODAY'S SUMMARY METRICS ---
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -216,7 +259,7 @@ else:
             }
             try:
                 supabase.schema("public").table("baby_logs").insert(data).execute()
-                st.success(f"{act_type} saved by {current_caregiver}!")
+                st.success(f"{act_type} saved successfully!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -243,7 +286,7 @@ else:
                     t = st.time_input("Time", (datetime.now() - timedelta(hours=1)).time())
                     past_t = datetime.combine(d, t)
 
-                if st.button("🚀 Start Sleep Timer", use_container_width=True):
+                if st.button("🚀 Start Sleep Timer"):
                     st.session_state.sleep_active = True
                     st.session_state.sleep_start_time = past_t or datetime.now()
                     st.rerun()
@@ -251,14 +294,14 @@ else:
                 st.warning(f"🔴 Sleeping! Started at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("Stop & Save", type="primary", use_container_width=True):
+                    if st.button("Stop & Save"):
                         end_t = datetime.now()
                         mins = int((end_t - st.session_state.sleep_start_time).total_seconds() / 60)
                         note = f"Slept for {mins} minutes ({st.session_state.sleep_start_time.strftime('%H:%M')} - {end_t.strftime('%H:%M')})"
                         save_log("Sleep", note, st.session_state.sleep_start_time)
                         st.session_state.sleep_active = False
                 with col2:
-                    if st.button("Cancel", use_container_width=True):
+                    if st.button("Cancel"):
                         st.session_state.sleep_active = False
                         st.rerun()
 
@@ -307,3 +350,4 @@ else:
                 st.write("---")
         except Exception as e:
             st.error(f"Error loading history: {e}")
+            
