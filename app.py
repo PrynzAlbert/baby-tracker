@@ -117,7 +117,7 @@ elif not st.session_state.profile:
     st.caption("Almost done! Tell us a bit about your family.")
     
     with st.form("profile_setup_form"):
-        caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Sarah...")
+        caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Audra...")
         setup_mode = st.radio("Family Setup", ["Create New Baby Profile", "Join Existing Family (Partner Code)"])
         
         baby_name = ""
@@ -207,7 +207,7 @@ else:
             st.rerun()
 
     st.title(f"🍼 {baby_name}'s Tracker")
-    st.caption(f"Welcome back, **{current_caregiver}**!")
+    st.markdown(f"Welcome back, **{current_caregiver}**!")
 
     # --- TODAY'S SUMMARY METRICS ---
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -254,7 +254,6 @@ else:
 
         if action == "Feed":
             with st.form("feed_form", clear_on_submit=True):
-                st.write(f"Logging as: **{current_caregiver}**")
                 ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
                 amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
                 note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
@@ -264,7 +263,6 @@ else:
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
-            st.write(f"Logging as: **{current_caregiver}**")
             
             if not st.session_state.sleep_active:
                 mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
@@ -295,7 +293,6 @@ else:
 
         elif action == "Diaper":
             with st.form("diaper_form", clear_on_submit=True):
-                st.write(f"Logging as: **{current_caregiver}**")
                 status = st.selectbox("Status", ["Wet", "Dirty", "Both"])
                 note = st.text_area("Extra Notes", placeholder="e.g., minor rash, heavy wet...")
                 if st.form_submit_button("Save Diaper"):
@@ -304,7 +301,6 @@ else:
 
         elif action == "Note":
             with st.form("note_form", clear_on_submit=True):
-                st.write(f"Logging as: **{current_caregiver}**")
                 note = st.text_area("Details", placeholder="Enter milestone, mood, or health note...")
                 if st.form_submit_button("Save Note"):
                     save_log("Note", note)
