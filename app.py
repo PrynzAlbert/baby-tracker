@@ -12,17 +12,12 @@ st.set_page_config(
 # --- HIGH-CONTRAST DARK MOBILE THEME CSS ---
 st.markdown("""
     <style>
-    /* Deep Slate Background & High Contrast White Text */
     .stApp { background-color: #0F172A; color: #F8FAFC; }
     h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
-    
-    /* Labels, Captions & Text */
     p, label, span, .stMarkdown { color: #E2E8F0 !important; }
     
-    /* Input Fields & Text Areas */
     input, textarea { color: #FFFFFF !important; background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 8px !important; }
     
-    /* Selectboxes */
     .stSelectbox div[data-baseweb="select"] {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -31,7 +26,6 @@ st.markdown("""
     }
     .stSelectbox span { color: #FFFFFF !important; }
     
-    /* Dropdown menus */
     div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -41,17 +35,14 @@ st.markdown("""
         color: #38BDF8 !important;
     }
 
-    /* Radio buttons */
     .stRadio label { color: #F8FAFC !important; font-weight: 600 !important; }
 
-    /* Action Buttons */
     .stButton>button { background-color: #38BDF8; color: #0F172A; border-radius: 12px; border: none; font-weight: 700; padding: 0.5rem 1rem; width: 100%; }
     .stButton>button:hover { background-color: #0EA5E9; color: #FFFFFF; }
     
     .stFormSubmitButton>button { background-color: #22C55E; color: #FFFFFF; border-radius: 12px; border: none; font-weight: 700; width: 100%; padding: 0.6rem; }
     .stFormSubmitButton>button:hover { background-color: #16A34A; }
     
-    /* Metric Cards */
     div[data-testid="stMetric"] { background-color: #1E293B; padding: 12px; border-radius: 12px; border: 1px solid #334155; }
     div[data-testid="stMetric"] label { color: #94A3B8 !important; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
@@ -121,7 +112,6 @@ if not st.session_state.user:
                     except Exception as e:
                         st.error(f"Registration failed: {e}")
 
-# If authenticated via email but profile hasn't been filled out yet
 elif not st.session_state.profile:
     st.title("👶 Setup Baby Profile")
     st.caption("Almost done! Tell us a bit about your family.")
@@ -149,7 +139,6 @@ elif not st.session_state.profile:
                     assigned_family_id = None
                     
                     if setup_mode == "Join Existing Family (Partner Code)":
-                        # Look up existing family id from code
                         match_res = supabase.schema("public").table("profiles").select("family_id, baby_name, baby_dob").eq("family_id", family_code).limit(1).execute()
                         if match_res.data:
                             assigned_family_id = match_res.data[0]["family_id"]
@@ -170,7 +159,6 @@ elif not st.session_state.profile:
 
                     supabase.schema("public").table("profiles").insert(profile_data).execute()
                     
-                    # Reload profile into session state
                     p_res = supabase.schema("public").table("profiles").select("*").eq("id", user_id).execute()
                     if p_res.data:
                         st.session_state.profile = p_res.data[0]
@@ -205,10 +193,10 @@ else:
         if baby_name:
             st.caption(f"Baby: **{baby_name}** ({age_text})")
         
-        st.divider()
-        st.markdown("**Family Sharing Code:**")
-        st.code(family_id, language="text")
-        st.caption("Share this code with your partner so they can join this baby's tracker.")
+        if family_id:
+            st.divider()
+            st.markdown("**Family Sharing Code:**")
+            st.code(family_id, language="text")
         
         st.divider()
         if st.button("Log Out"):
