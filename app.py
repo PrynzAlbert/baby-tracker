@@ -10,7 +10,7 @@ import streamlit as st
 from supabase import create_client
 
 # -------------------------------------------------------------------------------------
-# App configuration
+# App Configuration
 # -------------------------------------------------------------------------------------
 st.set_page_config(
     page_title="Smart Baby",
@@ -91,24 +91,38 @@ st.markdown(
 )
 
 # -------------------------------------------------------------------------------------
-# Global helpers
+# Logging & Initialization
 # -------------------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 
 
 @st.cache_resource
 def init_supabase():
+    """Initialize Supabase client."""
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 
 supabase = init_supabase()
 
 
+# -------------------------------------------------------------------------------------
+# Validation Helpers
+# -------------------------------------------------------------------------------------
 def is_valid_email(email: str) -> bool:
+    """Validate email format."""
     return "@" in email and "." in email.split("@")[-1]
 
 
-def get_profile_by_user(user_id: str | None):
+def is_family_ready(profile: dict | None) -> bool:
+    """Check if profile has a valid family_id."""
+    return bool(profile and profile.get("family_id"))
+
+
+# -------------------------------------------------------------------------------------
+# Database Helpers
+# -------------------------------------------------------------------------------------
+def get_profile_by_user(user_id: str | None) -> dict | None:
+    """Fetch user profile from database."""
     if not user_id:
         return None
     try:
@@ -126,11 +140,29 @@ def get_profile_by_user(user_id: str | None):
         return None
 
 
-def is_family_ready(profile: dict | None) -> bool:
-    return bool(profile and profile.get("family_id"))
+def get_family_members(family_id: str | None) -> list[dict]:
+    """Fetch all caregivers in a family."""
+    if not family_id:
+        return []
+    try:
+        response = (
+            supabase.schema("public")
+            .table("profiles")
+            .select("id, caregiver_name, baby_name")
+            .eq("family_id", family_id)
+            .execute()
+        )
+        return response.data or []
+    except Exception:
+        logging.exception("Failed to fetch family members for %s", family_id)
+        return []
 
 
+# -------------------------------------------------------------------------------------
+# Data Aggregation Helpers
+# -------------------------------------------------------------------------------------
 def calc_age_text(baby_dob_value: str | None) -> str:
+    """Calculate human-readable baby age."""
     if not baby_dob_value:
         return ""
     try:
@@ -146,7 +178,8 @@ def calc_age_text(baby_dob_value: str | None) -> str:
         return ""
 
 
-def fetch_today_logs(family_id: str | None):
+def fetch_today_logs(family_id: str | None) -> list[dict]:
+    """Fetch all logs for today, scoped to family."""
     if not family_id:
         return []
     today = datetime.now().strftime("%Y-%m-%d")
@@ -165,7 +198,8 @@ def fetch_today_logs(family_id: str | None):
         return []
 
 
-def fetch_recent_logs(family_id: str | None, limit: int = 20):
+def fetch_recent_logs(family_id: str | None, limit: int = 20) -> list[dict]:
+    """Fetch recent logs, scoped to family."""
     if not family_id:
         return []
     try:
@@ -185,6 +219,7 @@ def fetch_recent_logs(family_id: str | None, limit: int = 20):
 
 
 def fetch_history_chart(family_id: str | None) -> pd.DataFrame:
+    """Fetch logs for chart visualization, scoped to family."""
     if not family_id:
         return pd.DataFrame()
     try:
@@ -208,24 +243,17 @@ def fetch_history_chart(family_id: str | None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def delete_log(log_id: str | None):
-    if not log_id:
-        return
-    try:
-        supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
-        st.rerun()
-    except Exception:
-        logging.exception("Failed to delete log %s", log_id)
-        st.error("Could not delete that log.")
-
-
+# -------------------------------------------------------------------------------------
+# Log Management
+# -------------------------------------------------------------------------------------
 def save_log(
     act_type: str,
     note_text: str,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     duration_minutes: int | None = None,
-):
+) -> None:
+    """Save a log entry to the database."""
     profile = st.session_state.get("profile")
     if not profile:
         st.error("Your profile is not loaded yet.")
@@ -257,7 +285,20 @@ def save_log(
         st.error("Failed to save this log. Please try again.")
 
 
-def reset_session_after_logout():
+def delete_log(log_id: str | None) -> None:
+    """Delete a log entry."""
+    if not log_id:
+        return
+    try:
+        supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
+        st.rerun()
+    except Exception:
+        logging.exception("Failed to delete log %s", log_id)
+        st.error("Could not delete that log.")
+
+
+def reset_session_after_logout() -> None:
+    """Clear session state on logout."""
     st.session_state.user = None
     st.session_state.profile = None
     st.session_state.sleep_active = False
@@ -265,7 +306,7 @@ def reset_session_after_logout():
 
 
 # -------------------------------------------------------------------------------------
-# Session initialization
+# Session Initialization
 # -------------------------------------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -288,7 +329,8 @@ except Exception:
 # -------------------------------------------------------------------------------------
 # Authentication UI
 # -------------------------------------------------------------------------------------
-def render_auth_screen():
+def render_auth_screen() -> None:
+    """Display login and signup screens."""
     st.title("🍼 Smart Baby")
     st.caption("Sign in or create your account to begin.")
 
@@ -343,15 +385,19 @@ def render_auth_screen():
 
 
 # -------------------------------------------------------------------------------------
-# Profile setup UI
+# Profile Setup UI
 # -------------------------------------------------------------------------------------
-def render_profile_setup():
+def render_profile_setup() -> None:
+    """Display profile setup screen."""
     st.title("👶 Setup Baby Profile")
     st.caption("Almost done! Tell us a bit about your family.")
 
     with st.form("profile_setup_form"):
         caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Audra...")
-        setup_mode = st.radio("Family Setup", ["Create New Baby Profile", "Join Existing Family (Partner Code)"])
+        setup_mode = st.radio(
+            "Family Setup",
+            ["Create New Baby Profile", "Join Existing Family (Partner Code)"]
+        )
 
         baby_name = ""
         baby_dob = datetime.now().date()
@@ -361,7 +407,10 @@ def render_profile_setup():
             baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
             baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
         else:
-            family_code = st.text_input("Family Invite Code", placeholder="Paste partner's family code here...")
+            family_code = st.text_input(
+                "Family Invite Code",
+                placeholder="Paste partner's family code here..."
+            )
 
         if st.form_submit_button("Complete Setup"):
             if not caregiver_name:
@@ -417,9 +466,10 @@ def render_profile_setup():
 
 
 # -------------------------------------------------------------------------------------
-# Main app UI
+# Main App UI
 # -------------------------------------------------------------------------------------
-def render_main_app():
+def render_main_app() -> None:
+    """Display the main tracking app."""
     profile = st.session_state.profile
     if not profile:
         reset_session_after_logout()
@@ -431,6 +481,7 @@ def render_main_app():
     family_id = profile.get("family_id")
     age_text = calc_age_text(baby_dob_str)
 
+    # Sidebar
     with st.sidebar:
         st.write(f"Signed in as:\n**{current_caregiver}**")
         if baby_name:
@@ -441,6 +492,15 @@ def render_main_app():
             st.markdown("**Family Sharing Code:**")
             st.code(family_id, language="text")
 
+            # Show family members
+            with st.expander("👥 Family Members"):
+                family_members = get_family_members(family_id)
+                if family_members:
+                    for member in family_members:
+                        st.write(f"• **{member.get('caregiver_name')}**")
+                else:
+                    st.caption("No other family members yet.")
+
         st.divider()
         if st.button("Log Out"):
             try:
@@ -450,9 +510,11 @@ def render_main_app():
             reset_session_after_logout()
             st.rerun()
 
+    # Main content
     st.title(f"🍼 {baby_name}'s Tracker")
     st.markdown(f"Welcome back, **{current_caregiver}**!")
 
+    # Today's metrics
     today_logs = fetch_today_logs(family_id)
     feeds = sum(1 for item in today_logs if item.get("type") == "Feed")
     diapers = sum(1 for item in today_logs if item.get("type") == "Diaper")
@@ -469,6 +531,7 @@ def render_main_app():
 
     st.divider()
 
+    # Tabs
     tab_track, tab_analytics = st.tabs(["📝 Track & Log", "📊 History & Trends"])
 
     with tab_track:
