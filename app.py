@@ -22,101 +22,169 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .stApp { background-color: #0F172A; color: #F8FAFC; }
-    h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
-    p, label, span, .stMarkdown { color: #E2E8F0 !important; }
+    :root {
+        /* Warm, modern color palette */
+        --bg-primary: #FFF8F5;
+        --bg-secondary: #FFF1EA;
+        --bg-tertiary: #FFE8DC;
+        --accent-warm: #FF9F7F;
+        --accent-bold: #FF7A5C;
+        --accent-soft: #FFB8A3;
+        --text-primary: #3D2817;
+        --text-secondary: #6B4423;
+        --text-light: #8B6A52;
+        --border-color: #F5D4C8;
+        --success-color: #6BAA75;
+        --info-color: #5B9CD6;
+    }
+
+    .stApp { 
+        background-color: #FFF8F5; 
+        color: #3D2817; 
+    }
+    
+    h1, h2, h3, h4, h5, h6 { 
+        color: #3D2817 !important; 
+        font-weight: 700 !important;
+    }
+    
+    p, label, span, .stMarkdown { 
+        color: #6B4423 !important; 
+    }
 
     input, textarea, .stTextInput input, .stDateInput input, .stTimeInput input {
-        color: #FFFFFF !important;
-        background-color: #1E293B !important;
-        border: 1px solid #475569 !important;
+        color: #3D2817 !important;
+        background-color: #FFF1EA !important;
+        border: 1.5px solid #F5D4C8 !important;
         border-radius: 8px !important;
+    }
+    
+    input::placeholder {
+        color: #A0887A !important;
     }
 
     .stSelectbox div[data-baseweb="select"] {
-        background-color: #1E293B !important;
-        color: #FFFFFF !important;
+        background-color: #FFF1EA !important;
+        color: #3D2817 !important;
         border-radius: 8px !important;
-        border: 1px solid #475569 !important;
+        border: 1.5px solid #F5D4C8 !important;
     }
-    .stSelectbox span { color: #FFFFFF !important; }
+    .stSelectbox span { color: #3D2817 !important; }
 
     div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
-        background-color: #1E293B !important;
-        color: #FFFFFF !important;
+        background-color: #FFF1EA !important;
+        color: #3D2817 !important;
     }
     div[data-baseweb="menu"] div:hover {
-        background-color: #334155 !important;
-        color: #38BDF8 !important;
+        background-color: #FFE8DC !important;
+        color: #FF7A5C !important;
     }
 
-    .stRadio label { color: #F8FAFC !important; font-weight: 600 !important; }
+    .stRadio label { 
+        color: #3D2817 !important; 
+        font-weight: 600 !important; 
+    }
+    
+    .stRadio div[role="radiogroup"] {
+        gap: 1.5rem !important;
+    }
 
     .stButton>button {
-        background-color: #38BDF8;
-        color: #0F172A;
-        border-radius: 12px;
+        background-color: #FF7A5C;
+        color: #FFFFFF;
+        border-radius: 10px;
         border: none;
         font-weight: 700;
-        padding: 0.5rem 1rem;
+        padding: 0.6rem 1rem;
         width: 100%;
     }
     .stButton>button:hover {
-        background-color: #0EA5E9;
+        background-color: #FF9F7F;
         color: #FFFFFF;
+        box-shadow: 0 4px 12px rgba(255, 122, 92, 0.3);
     }
 
     .stFormSubmitButton>button {
-        background-color: #22C55E;
+        background-color: #6BAA75;
         color: #FFFFFF;
-        border-radius: 12px;
+        border-radius: 10px;
         border: none;
         font-weight: 700;
         width: 100%;
-        padding: 0.6rem;
+        padding: 0.7rem;
     }
-    .stFormSubmitButton>button:hover { background-color: #16A34A; }
+    .stFormSubmitButton>button:hover { 
+        background-color: #5A9563;
+        box-shadow: 0 4px 12px rgba(107, 170, 117, 0.3);
+    }
 
     div[data-testid="stMetric"] {
-        background-color: #1E293B;
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid #334155;
+        background-color: #FFF1EA;
+        padding: 14px;
+        border-radius: 10px;
+        border: 1.5px solid #F5D4C8;
     }
-    div[data-testid="stMetric"] label { color: #94A3B8 !important; }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
+    div[data-testid="stMetric"] label { 
+        color: #8B6A52 !important; 
+        font-size: 0.85rem !important;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { 
+        color: #FF7A5C !important; 
+        font-size: 1.8rem !important;
+    }
 
     .family-code-box {
-        background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(30,41,59,0.9));
-        border: 2px solid #38BDF8;
+        background: linear-gradient(135deg, rgba(255, 122, 92, 0.08), rgba(255, 241, 234, 0.9));
+        border: 2px solid #FF9F7F;
         border-radius: 14px;
-        padding: 18px 20px;
+        padding: 20px;
         text-align: center;
         margin: 18px 0;
     }
     .family-code-display {
-        font-size: 2rem;
+        font-size: 2.2rem;
         font-weight: 800;
-        letter-spacing: 0.22rem;
-        color: #38BDF8;
+        letter-spacing: 0.24rem;
+        color: #FF7A5C;
         font-family: "SFMono-Regular", Consolas, monospace;
     }
+    
     .member-card {
-        background-color: #1E293B;
-        border: 1px solid #334155;
+        background-color: #FFF1EA;
+        border: 1.5px solid #F5D4C8;
         border-radius: 10px;
         padding: 12px 14px;
         margin: 8px 0;
     }
+    .member-card strong {
+        color: #FF7A5C !important;
+    }
+    
     .nav-btn > button {
         border-radius: 10px;
     }
     .danger-btn > button {
-        background-color: #EF4444 !important;
+        background-color: #E74C3C !important;
         color: #FFFFFF !important;
     }
     .danger-btn > button:hover {
-        background-color: #DC2626 !important;
+        background-color: #C0392B !important;
+    }
+    
+    .stDivider {
+        background-color: #F5D4C8 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #6B4423 !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #FF7A5C !important;
+    }
+    
+    .stAlert {
+        border-radius: 10px !important;
     }
     </style>
     """,
@@ -126,7 +194,11 @@ st.markdown(
 # -------------------------------------------------------------------------------------
 # Logging & Initialization
 # -------------------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @st.cache_resource
@@ -168,8 +240,8 @@ def get_profile_by_user(user_id: str | None) -> dict | None:
             .execute()
         )
         return (response.data or [None])[0]
-    except Exception:
-        logging.exception("Failed to fetch profile for user %s", user_id)
+    except Exception as e:
+        logger.exception("Failed to fetch profile for user %s: %s", user_id, str(e))
         return None
 
 
@@ -186,8 +258,8 @@ def get_family_members(family_id: str | None) -> list[dict]:
             .execute()
         )
         return response.data or []
-    except Exception:
-        logging.exception("Failed to fetch family members for %s", family_id)
+    except Exception as e:
+        logger.exception("Failed to fetch family members for %s: %s", family_id, str(e))
         return []
 
 
@@ -206,8 +278,8 @@ def calc_age_text(baby_dob_value: str | None) -> str:
         if days_old < 365:
             return f"{round(days_old / 30, 1)} months old"
         return f"{round(days_old / 365, 1)} years old"
-    except Exception:
-        logging.exception("Unable to calculate age for %s", baby_dob_value)
+    except Exception as e:
+        logger.exception("Unable to calculate age for %s: %s", baby_dob_value, str(e))
         return ""
 
 
@@ -226,8 +298,8 @@ def fetch_today_logs(family_id: str | None) -> list[dict]:
             .execute()
         )
         return response.data or []
-    except Exception:
-        logging.exception("Failed to fetch today's logs for family %s", family_id)
+    except Exception as e:
+        logger.exception("Failed to fetch today's logs for family %s: %s", family_id, str(e))
         return []
 
 
@@ -246,8 +318,8 @@ def fetch_recent_logs(family_id: str | None, limit: int = 20) -> list[dict]:
             .execute()
         )
         return response.data or []
-    except Exception:
-        logging.exception("Failed to fetch recent logs for family %s", family_id)
+    except Exception as e:
+        logger.exception("Failed to fetch recent logs for family %s: %s", family_id, str(e))
         return []
 
 
@@ -271,8 +343,8 @@ def fetch_history_chart(family_id: str | None) -> pd.DataFrame:
         df = pd.DataFrame(rows)
         df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
         return df.groupby(["date", "type"]).size().unstack(fill_value=0)
-    except Exception:
-        logging.exception("Failed to fetch chart history for family %s", family_id)
+    except Exception as e:
+        logger.exception("Failed to fetch chart history for family %s: %s", family_id, str(e))
         return pd.DataFrame()
 
 
@@ -309,13 +381,17 @@ def save_log(
     if duration_minutes is not None:
         payload["duration_minutes"] = int(duration_minutes)
 
+    logger.info("Attempting to save log: %s for family %s", act_type, family_id)
+    logger.debug("Payload: %s", payload)
+    
     try:
-        supabase.schema("public").table("baby_logs").insert(payload).execute()
+        result = supabase.schema("public").table("baby_logs").insert(payload).execute()
+        logger.info("Log saved successfully: %s", result.data)
         st.success(f"{act_type} saved successfully!")
         st.rerun()
-    except Exception:
-        logging.exception("Error saving log for family %s", family_id)
-        st.error("Failed to save this log. Please try again.")
+    except Exception as e:
+        logger.exception("Error saving log for family %s. Error details: %s", family_id, str(e))
+        st.error(f"Failed to save this log. Please try again. (Error: {str(e)[:100]})")
 
 
 def delete_log(log_id: str | None) -> None:
@@ -324,9 +400,10 @@ def delete_log(log_id: str | None) -> None:
         return
     try:
         supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
+        logger.info("Log deleted successfully: %s", log_id)
         st.rerun()
-    except Exception:
-        logging.exception("Failed to delete log %s", log_id)
+    except Exception as e:
+        logger.exception("Failed to delete log %s: %s", log_id, str(e))
         st.error("Could not delete that log.")
 
 
@@ -357,8 +434,8 @@ try:
     if session and getattr(session, "user", None):
         st.session_state.user = session.user
         st.session_state.profile = get_profile_by_user(session.user.id)
-except Exception:
-    logging.exception("Failed to restore existing session")
+except Exception as e:
+    logger.exception("Failed to restore existing session: %s", str(e))
 
 
 # -------------------------------------------------------------------------------------
@@ -389,8 +466,8 @@ def render_auth_screen() -> None:
                             st.rerun()
                         else:
                             st.error("Login failed. Please check your credentials.")
-                    except Exception:
-                        logging.exception("Login failed")
+                    except Exception as e:
+                        logger.exception("Login failed: %s", str(e))
                         st.error("Login failed. Please check your credentials.")
 
     with tab_signup:
@@ -414,8 +491,8 @@ def render_auth_screen() -> None:
                             st.rerun()
                         else:
                             st.error("Registration failed. Please try again.")
-                    except Exception:
-                        logging.exception("Registration failed")
+                    except Exception as e:
+                        logger.exception("Registration failed: %s", str(e))
                         st.error("Registration failed. Please try again.")
 
 
@@ -495,8 +572,8 @@ def render_profile_setup() -> None:
 
                     st.session_state.profile = get_profile_by_user(user_id)
                     st.rerun()
-                except Exception:
-                    logging.exception("Profile setup failed")
+                except Exception as e:
+                    logger.exception("Profile setup failed: %s", str(e))
                     st.error("Profile creation failed. Please try again.")
 
 
@@ -565,8 +642,8 @@ def render_settings() -> None:
     if st.button("Log out", use_container_width=True, key="settings_logout"):
         try:
             supabase.auth.sign_out()
-        except Exception:
-            logging.exception("Failed to sign out")
+        except Exception as e:
+            logger.exception("Failed to sign out: %s", str(e))
         reset_session_after_logout()
         st.session_state.current_page = "tracker"
         st.rerun()
@@ -728,8 +805,8 @@ def render_main_app() -> None:
         if st.button("Log out", use_container_width=True, key="nav_logout"):
             try:
                 supabase.auth.sign_out()
-            except Exception:
-                logging.exception("Failed to sign out")
+            except Exception as e:
+                logger.exception("Failed to sign out: %s", str(e))
             reset_session_after_logout()
             st.session_state.current_page = "tracker"
             st.rerun()
