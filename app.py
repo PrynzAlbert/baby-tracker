@@ -1,23 +1,31 @@
+from __future__ import annotations
+
+import logging
 from datetime import datetime, timedelta
-import time
+from uuid import uuid4
+
 import pandas as pd
 import streamlit as st
 from supabase import create_client
 
 # Page Configuration
 st.set_page_config(
-    page_title="Smart Baby", page_icon="🍼", layout="centered", initial_sidebar_state="collapsed"
+    page_title="Smart Baby",
+    page_icon="🍼",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 # --- HIGH-CONTRAST DARK MOBILE THEME CSS ---
-st.markdown("""
+st.markdown(
+    """
     <style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
     h1, h2, h3, h4, h5, h6 { color: #F1F5F9 !important; }
     p, label, span, .stMarkdown { color: #E2E8F0 !important; }
-    
+
     input, textarea { color: #FFFFFF !important; background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 8px !important; }
-    
+
     .stSelectbox div[data-baseweb="select"] {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -25,7 +33,7 @@ st.markdown("""
         border: 1px solid #475569 !important;
     }
     .stSelectbox span { color: #FFFFFF !important; }
-    
+
     div[data-baseweb="popover"] div, div[data-baseweb="menu"] div {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -39,61 +47,210 @@ st.markdown("""
 
     .stButton>button { background-color: #38BDF8; color: #0F172A; border-radius: 12px; border: none; font-weight: 700; padding: 0.5rem 1rem; width: 100%; }
     .stButton>button:hover { background-color: #0EA5E9; color: #FFFFFF; }
-    
+
     .stFormSubmitButton>button { background-color: #22C55E; color: #FFFFFF; border-radius: 12px; border: none; font-weight: 700; width: 100%; padding: 0.6rem; }
     .stFormSubmitButton>button:hover { background-color: #16A34A; }
-    
+
     div[data-testid="stMetric"] { background-color: #1E293B; padding: 12px; border-radius: 12px; border: 1px solid #334155; }
     div[data-testid="stMetric"] label { color: #94A3B8 !important; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-# Initialize Supabase
+
+# ---------- Helpers ----------
 @st.cache_resource
 def init_supabase():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
+
 supabase = init_supabase()
+
+
+def get_profile_from_user(user_id: str):
+    try:
+        response = supabase.schema("public").table("profiles").select("*").eq("id", user_id).limit(1).execute()
+        if response.data:
+            return response.data[0]
+    except Exception:
+        logging.exception("Failed to load profile for user %s", user_id)
+    return None
+
+
+def calc_age_text(baby_dob_value: str | None) -> str:
+    if not baby_dob_value:
+        return ""
+
+    try:
+        dob = datetime.strptime(baby_dob_value, "%Y-%m-%d").date()
+        days_old = (datetime.now().date() - dob).days
+        if days_old < 30:
+            return f"{days_old} days old"
+        if days_old < 365:
+            return f"{round(days_old / 30, 1)} months old"
+        return f"{round(days_old / 365, 1)} years old"
+    except Exception:
+        logging.exception("Unable to calculate age for %s", baby_dob_value)
+        return ""
+
+
+def fetch_today_logs(family_id: str | None):
+    if not family_id:
+        return []
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        response = (
+            supabase.schema("public")
+            .table("baby_logs")
+            .select("*")
+            .eq("family_id", family_id)
+            .gte("start_date_time", f"{today}T00:00:00")
+            .execute()
+        )
+        return response.data or []
+    except Exception:
+        logging.exception("Failed to fetch today's logs")
+        return []
+
+
+def fetch_recent_logs(family_id: str | None, limit: int = 20):
+    if not family_id:
+        return []
+
+    try:
+        response = (
+            supabase.schema("public")
+            .table("baby_logs")
+            .select("*")
+            .eq("family_id", family_id)
+            .order("start_date_time", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+    except Exception:
+        logging.exception("Failed to fetch recent logs for family %s", family_id)
+        return []
+
+
+def fetch_history_chart(family_id: str | None):
+    if not family_id:
+        return pd.DataFrame()
+
+    try:
+        response = (
+            supabase.schema("public")
+            .table("baby_logs")
+            .select("type, start_date_time")
+            .eq("family_id", family_id)
+            .order("start_date_time", desc=False)
+            .limit(100)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
+        return df.groupby(["date", "type"]).size().unstack(fill_value=0)
+    except Exception:
+        logging.exception("Failed to fetch chart history for family %s", family_id)
+        return pd.DataFrame()
+
+
+def delete_log(log_id):
+    if not log_id:
+        return
+
+    try:
+        supabase.schema("public").table("baby_logs").delete().eq("id", log_id).execute()
+        st.rerun()
+    except Exception:
+        logging.exception("Failed to delete log %s", log_id)
+        st.error("Could not delete that log.")
+
+
+def save_log(act_type: str, note_text: str, start_time: datetime | None = None, end_time: datetime | None = None, duration_minutes: int | None = None):
+    profile = st.session_state.get("profile")
+    if not profile:
+        st.error("Your profile is not loaded yet.")
+        return
+
+    family_id = profile.get("family_id")
+    if not family_id:
+        st.error("This account is not attached to a family yet.")
+        return
+
+    payload = {
+        "type": act_type,
+        "created_by_caregiver": profile.get("caregiver_name", "Caregiver"),
+        "note": note_text,
+        "family_id": family_id,
+        "start_date_time": (start_time or datetime.now()).isoformat(),
+    }
+    if end_time is not None:
+        payload["end_date_time"] = end_time.isoformat()
+    if duration_minutes is not None:
+        payload["duration_minutes"] = int(duration_minutes)
+
+    try:
+        supabase.schema("public").table("baby_logs").insert(payload).execute()
+        st.success(f"{act_type} saved successfully!")
+        st.rerun()
+    except Exception:
+        logging.exception("Error saving log for family %s", family_id)
+        st.error("Failed to save this log. Please try again.")
+
 
 # Session State Init
 if "user" not in st.session_state:
     st.session_state.user = None
 if "profile" not in st.session_state:
     st.session_state.profile = None
+if "sleep_active" not in st.session_state:
+    st.session_state.sleep_active = False
+if "sleep_start_time" not in st.session_state:
+    st.session_state.sleep_start_time = None
 
 try:
     session = supabase.auth.get_session()
-    if session and session.user:
+    if session and getattr(session, "user", None):
         st.session_state.user = session.user
-        profile_res = supabase.schema("public").table("profiles").select("*").eq("id", session.user.id).execute()
-        if profile_res.data:
-            st.session_state.profile = profile_res.data[0]
-except:
-    pass
+        st.session_state.profile = get_profile_from_user(session.user.id)
+except Exception:
+    logging.exception("Failed to restore an existing auth session")
 
-# --- AUTHENTICATION & MULTI-STEP PROFILE SETUP GATE ---
-if not st.session_state.user:
+
+# ---------- AUTH SCREEN ----------
+def render_auth_screen():
     st.title("🍼 Smart Baby")
     st.caption("Sign in or create your account to begin.")
-    
+
     tab_login, tab_signup = st.tabs(["Sign In", "Register Email"])
-    
+
     with tab_login:
         with st.form("login_form"):
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
             if st.form_submit_button("Sign In"):
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                    if res.user:
-                        st.session_state.user = res.user
-                        p_res = supabase.schema("public").table("profiles").select("*").eq("id", res.user.id).execute()
-                        if p_res.data:
-                            st.session_state.profile = p_res.data[0]
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Login failed: {e}")
+                if not email or not password:
+                    st.error("Please enter both email and password.")
+                else:
+                    try:
+                        result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        if result.user:
+                            st.session_state.user = result.user
+                            st.session_state.profile = get_profile_from_user(result.user.id)
+                            st.rerun()
+                        else:
+                            st.error("Login failed. Please check your credentials.")
+                    except Exception:
+                        logging.exception("Login failed")
+                        st.error("Login failed. Please check your credentials.")
 
     with tab_signup:
         with st.form("signup_form"):
@@ -107,19 +264,25 @@ if not st.session_state.user:
                         auth_res = supabase.auth.sign_up({"email": reg_email, "password": reg_password})
                         if auth_res.user:
                             st.session_state.user = auth_res.user
+                            st.session_state.profile = None
                             st.success("Account created! Please complete your profile below.")
                             st.rerun()
-                    except Exception as e:
-                        st.error(f"Registration failed: {e}")
+                        else:
+                            st.error("Registration failed. Please try again.")
+                    except Exception:
+                        logging.exception("Registration failed")
+                        st.error("Registration failed. Please try again.")
 
-elif not st.session_state.profile:
+
+# ---------- PROFILE SETUP ----------
+def render_profile_setup():
     st.title("👶 Setup Baby Profile")
     st.caption("Almost done! Tell us a bit about your family.")
-    
+
     with st.form("profile_setup_form"):
         caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Audra...")
         setup_mode = st.radio("Family Setup", ["Create New Baby Profile", "Join Existing Family (Partner Code)"])
-        
+
         baby_name = ""
         baby_dob = datetime.now().date()
         family_code = ""
@@ -131,164 +294,163 @@ elif not st.session_state.profile:
             family_code = st.text_input("Family Invite Code", placeholder="Paste partner's family code here...")
 
         if st.form_submit_button("Complete Setup"):
-            if not caregiver_name or (setup_mode == "Create New Baby Profile" and not baby_name) or (setup_mode == "Join Existing Family (Partner Code)" and not family_code):
-                st.error("Please fill in all required details.")
+            if not caregiver_name:
+                st.error("Please enter your caregiver username.")
+            elif setup_mode == "Create New Baby Profile" and not baby_name:
+                st.error("Please enter your baby's name.")
+            elif setup_mode == "Join Existing Family (Partner Code)" and not family_code:
+                st.error("Please enter a family invite code.")
             else:
                 try:
                     user_id = st.session_state.user.id
                     assigned_family_id = None
-                    
+                    final_baby_name = baby_name
+                    final_baby_dob = str(baby_dob)
+
                     if setup_mode == "Join Existing Family (Partner Code)":
-                        match_res = supabase.schema("public").table("profiles").select("family_id, baby_name, baby_dob").eq("family_id", family_code).limit(1).execute()
-                        if match_res.data:
-                            assigned_family_id = match_res.data[0]["family_id"]
-                            baby_name = match_res.data[0]["baby_name"]
-                            baby_dob = match_res.data[0]["baby_dob"]
-                        else:
+                        match_res = (
+                            supabase.schema("public")
+                            .table("profiles")
+                            .select("family_id, baby_name, baby_dob")
+                            .eq("family_id", family_code)
+                            .limit(1)
+                            .execute()
+                        )
+                        if not match_res.data:
                             st.error("Invalid family invite code. Please check with your partner.")
                             st.stop()
+                        assigned_family_id = match_res.data[0]["family_id"]
+                        final_baby_name = match_res.data[0]["baby_name"]
+                        final_baby_dob = match_res.data[0]["baby_dob"]
+                    else:
+                        assigned_family_id = uuid4().hex[:8].upper()
 
                     profile_data = {
                         "id": user_id,
                         "caregiver_name": caregiver_name,
-                        "baby_name": baby_name,
-                        "baby_dob": str(baby_dob)
+                        "baby_name": final_baby_name,
+                        "baby_dob": final_baby_dob,
+                        "family_id": assigned_family_id,
                     }
-                    if assigned_family_id:
-                        profile_data["family_id"] = assigned_family_id
 
-                    supabase.schema("public").table("profiles").insert(profile_data).execute()
-                    
-                    p_res = supabase.schema("public").table("profiles").select("*").eq("id", user_id).execute()
-                    if p_res.data:
-                        st.session_state.profile = p_res.data[0]
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Profile creation failed: {e}")
+                    current_profile = get_profile_from_user(user_id)
+                    if current_profile:
+                        supabase.schema("public").table("profiles").update(profile_data).eq("id", user_id).execute()
+                    else:
+                        supabase.schema("public").table("profiles").insert(profile_data).execute()
 
-else:
-    # --- MAIN APP (Authenticated & Profile Loaded) ---
+                    st.session_state.profile = get_profile_from_user(user_id)
+                    st.rerun()
+                except Exception:
+                    logging.exception("Profile setup failed")
+                    st.error("Profile creation failed. Please try again.")
+
+
+# ---------- MAIN APP ----------
+def render_main_app():
     profile = st.session_state.profile
+    if not profile:
+        st.session_state.user = None
+        st.session_state.profile = None
+        st.rerun()
+
     current_caregiver = profile.get("caregiver_name", "Caregiver")
     baby_name = profile.get("baby_name", "Baby")
     baby_dob_str = profile.get("baby_dob")
     family_id = profile.get("family_id")
-
-    age_text = ""
-    if baby_dob_str:
-        try:
-            dob = datetime.strptime(baby_dob_str, "%Y-%m-%d").date()
-            days_old = (datetime.now().date() - dob).days
-            if days_old < 30:
-                age_text = f"{days_old} days old"
-            elif days_old < 365:
-                age_text = f"{round(days_old / 30, 1)} months old"
-            else:
-                age_text = f"{round(days_old / 365, 1)} years old"
-        except:
-            pass
+    age_text = calc_age_text(baby_dob_str)
 
     with st.sidebar:
         st.write(f"Signed in as:\n**{current_caregiver}**")
         if baby_name:
             st.caption(f"Baby: **{baby_name}** ({age_text})")
-        
+
         if family_id:
             st.divider()
             st.markdown("**Family Sharing Code:**")
             st.code(family_id, language="text")
-        
+
         st.divider()
         if st.button("Log Out"):
-            try: supabase.auth.sign_out()
-            except: pass
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                logging.exception("Failed to sign out")
             st.session_state.user = None
             st.session_state.profile = None
+            st.session_state.sleep_active = False
+            st.session_state.sleep_start_time = None
             st.rerun()
 
     st.title(f"🍼 {baby_name}'s Tracker")
     st.markdown(f"Welcome back, **{current_caregiver}**!")
 
-    # --- TODAY'S SUMMARY METRICS ---
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    try:
-        dash_res = supabase.schema("public").table("baby_logs").select("type, note, start_date_time").gte("start_date_time", f"{today_str}T00:00:00").execute()
-        today_logs = dash_res.data or []
-        
-        feeds = sum(1 for l in today_logs if l.get("type") == "Feed")
-        diapers = sum(1 for l in today_logs if l.get("type") == "Diaper")
-        sleep_mins = sum(int(l["note"].split("Slept for ")[1].split(" minutes")[0]) for l in today_logs if l.get("type") == "Sleep" and "Slept for" in l.get("note", ""))
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("💤 Sleep", f"{round(sleep_mins/60, 1)}h")
-        c2.metric("🍼 Feeds", feeds)
-        c3.metric("🧷 Diapers", diapers)
-    except:
-        pass
+    today_logs = fetch_today_logs(family_id)
+    feeds = sum(1 for item in today_logs if item.get("type") == "Feed")
+    diapers = sum(1 for item in today_logs if item.get("type") == "Diaper")
+    sleep_mins = sum(int(item.get("duration_minutes") or 0) for item in today_logs if item.get("type") == "Sleep")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("💤 Sleep", f"{round(sleep_mins / 60, 1)}h")
+    c2.metric("🍼 Feeds", feeds)
+    c3.metric("🧷 Diapers", diapers)
 
     st.divider()
 
-    # --- MAIN APP TABS ---
     tab_track, tab_analytics = st.tabs(["📝 Track & Log", "📊 History & Trends"])
 
     with tab_track:
-        if "sleep_active" not in st.session_state:
-            st.session_state.sleep_active = False
-            st.session_state.sleep_start_time = None
-
         action = st.radio("Select Activity", ["Feed", "Sleep", "Diaper", "Note"], horizontal=True)
-
-        def save_log(act_type, note_text, start_time=None):
-            data = {
-                "type": act_type,
-                "created_by_caregiver": current_caregiver,
-                "note": note_text,
-                "start_date_time": (start_time or datetime.now()).isoformat()
-            }
-            try:
-                supabase.schema("public").table("baby_logs").insert(data).execute()
-                st.success(f"{act_type} saved successfully!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
 
         if action == "Feed":
             with st.form("feed_form", clear_on_submit=True):
-                ftype = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
-                amt = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
+                feed_type = st.selectbox("Type", ["Breast Milk", "Formula", "Solid"])
+                amount = st.number_input("Amount (ml / oz)", min_value=0.0, step=10.0)
                 note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
                 if st.form_submit_button("Save Feed"):
-                    final_note = f"{ftype} ({amt}ml) - {note}" if amt > 0 else f"{ftype} - {note}"
+                    final_note = f"{feed_type} ({amount}ml) - {note}" if amount > 0 else f"{feed_type} - {note}"
                     save_log("Feed", final_note)
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
-            
+
             if not st.session_state.sleep_active:
                 mode = st.radio("Mode", ["Start Now", "Add Past Start Time"], horizontal=True)
-                past_t = None
+                past_start_time = None
+
                 if mode == "Add Past Start Time":
-                    d = st.date_input("Date", datetime.now().date())
-                    t = st.time_input("Time", (datetime.now() - timedelta(hours=1)).time())
-                    past_t = datetime.combine(d, t)
+                    selected_date = st.date_input("Date", datetime.now().date())
+                    selected_time = st.time_input("Time", (datetime.now() - timedelta(hours=1)).time())
+                    past_start_time = datetime.combine(selected_date, selected_time)
 
                 if st.button("🚀 Start Sleep Timer"):
                     st.session_state.sleep_active = True
-                    st.session_state.sleep_start_time = past_t or datetime.now()
+                    st.session_state.sleep_start_time = past_start_time or datetime.now()
                     st.rerun()
             else:
                 st.warning(f"🔴 Sleeping! Started at {st.session_state.sleep_start_time.strftime('%H:%M:%S')}")
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("Stop & Save"):
-                        end_t = datetime.now()
-                        mins = int((end_t - st.session_state.sleep_start_time).total_seconds() / 60)
-                        note = f"Slept for {mins} minutes ({st.session_state.sleep_start_time.strftime('%H:%M')} - {end_t.strftime('%H:%M')})"
-                        save_log("Sleep", note, st.session_state.sleep_start_time)
+                        end_time = datetime.now()
+                        duration_minutes = max(int((end_time - st.session_state.sleep_start_time).total_seconds() / 60), 0)
+                        note_text = (
+                            f"Slept for {duration_minutes} minutes "
+                            f"({st.session_state.sleep_start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')})"
+                        )
+                        save_log(
+                            "Sleep",
+                            note_text,
+                            start_time=st.session_state.sleep_start_time,
+                            end_time=end_time,
+                            duration_minutes=duration_minutes,
+                        )
                         st.session_state.sleep_active = False
+                        st.session_state.sleep_start_time = None
                 with col2:
                     if st.button("Cancel"):
                         st.session_state.sleep_active = False
+                        st.session_state.sleep_start_time = None
                         st.rerun()
 
         elif action == "Diaper":
@@ -307,31 +469,40 @@ else:
 
     with tab_analytics:
         st.subheader("📈 Trends & Timeline")
-        try:
-            chart_res = supabase.schema("public").table("baby_logs").select("type, start_date_time").order("start_date_time", desc=False).limit(100).execute()
-            if chart_res.data:
-                df = pd.DataFrame(chart_res.data)
-                df["date"] = pd.to_datetime(df["start_date_time"]).dt.strftime("%Y-%m-%d")
-                chart_data = df.groupby(["date", "type"]).size().unstack(fill_value=0)
-                st.bar_chart(chart_data)
-        except:
+        chart_data = fetch_history_chart(family_id)
+        if chart_data.empty:
             st.info("Analytics will appear once data is logged.")
+        else:
+            st.bar_chart(chart_data)
 
         st.divider()
         st.subheader("Recent Activity History")
-        try:
-            res = supabase.schema("public").table("baby_logs").select("*").order("start_date_time", desc=True).limit(20).execute()
-            for log in (res.data or []):
+
+        recent_logs = fetch_recent_logs(family_id, limit=20)
+        if not recent_logs:
+            st.info("No activity yet. Start logging your baby's routine.")
+        else:
+            for log in recent_logs:
+                log_id = log.get("id")
                 col_i, col_d = st.columns([5, 1])
                 with col_i:
-                    st.markdown(f"**{log.get('type').upper()}** — *{log.get('created_by_caregiver')}*")
-                    if log.get('note'): st.write(f"📝 {log.get('note')}")
-                    st.caption(f"{log.get('start_date_time', '').replace('T', ' ')[:16]}")
+                    log_type = (log.get("type") or "").upper()
+                    caregiver = log.get("created_by_caregiver") or "Caregiver"
+                    st.markdown(f"**{log_type}** — *{caregiver}*")
+                    if log.get("note"):
+                        st.write(f"📝 {log.get('note')}")
+                    if log.get("start_date_time"):
+                        st.caption(log.get("start_date_time", "").replace("T", " ")[:16])
                 with col_d:
-                    if st.button("❌", key=f"del_{log.get('id')}"):
-                        supabase.schema("public").table("baby_logs").delete().eq("id", log.get('id')).execute()
-                        st.rerun()
+                    if st.button("❌", key=f"del_{log_id}"):
+                        delete_log(log_id)
                 st.write("---")
-        except Exception as e:
-            st.error(f"Error loading history: {e}")
-            
+
+
+# ---------- ROUTING ----------
+if st.session_state.user is None:
+    render_auth_screen()
+elif not st.session_state.profile:
+    render_profile_setup()
+else:
+    render_main_app()
