@@ -357,6 +357,9 @@ def save_log(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     duration_minutes: int | None = None,
+    feed_type: str | None = None,
+    amount_ml: float | None = None,
+    diaper_status: str | None = None,
 ) -> None:
     """Save a log entry to the database."""
     profile = st.session_state.get("profile")
@@ -369,17 +372,27 @@ def save_log(
         st.error("This account is not attached to a family yet.")
         return
 
+    # Build payload with only non-None values
     payload: dict[str, Any] = {
         "type": act_type,
         "created_by_caregiver": profile.get("caregiver_name", "Caregiver"),
         "note": note_text,
         "family_id": family_id,
         "start_date_time": (start_time or datetime.now()).isoformat(),
+        "source_app": "smart_baby",
     }
+    
+    # Add optional fields only if provided
     if end_time is not None:
         payload["end_date_time"] = end_time.isoformat()
     if duration_minutes is not None:
         payload["duration_minutes"] = int(duration_minutes)
+    if feed_type is not None:
+        payload["feed_type"] = feed_type
+    if amount_ml is not None:
+        payload["amount_ml"] = float(amount_ml)
+    if diaper_status is not None:
+        payload["diaper_status"] = diaper_status
 
     logger.info("Attempting to save log: %s for family %s", act_type, family_id)
     logger.debug("Payload: %s", payload)
@@ -390,8 +403,9 @@ def save_log(
         st.success(f"{act_type} saved successfully!")
         st.rerun()
     except Exception as e:
-        logger.exception("Error saving log for family %s. Error details: %s", family_id, str(e))
-        st.error(f"Failed to save this log. Please try again. (Error: {str(e)[:100]})")
+        error_msg = str(e)
+        logger.exception("Error saving log for family %s. Error details: %s", family_id, error_msg)
+        st.error(f"Failed to save this log. Error: {error_msg[:150]}")
 
 
 def delete_log(log_id: str | None) -> None:
@@ -682,7 +696,12 @@ def render_tracker_page(family_id: str | None) -> None:
                 note = st.text_area("Extra Notes", placeholder="e.g., drank 120ml, burped well...")
                 if st.form_submit_button("Save Feed"):
                     final_note = f"{feed_type} ({amount}ml) - {note}" if amount > 0 else f"{feed_type} - {note}"
-                    save_log("Feed", final_note)
+                    save_log(
+                        "Feed",
+                        final_note,
+                        feed_type=feed_type,
+                        amount_ml=amount if amount > 0 else None,
+                    )
 
         elif action == "Sleep":
             st.subheader("💤 Sleep Tracker")
@@ -735,7 +754,7 @@ def render_tracker_page(family_id: str | None) -> None:
                 note = st.text_area("Extra Notes", placeholder="e.g., minor rash, heavy wet...")
                 if st.form_submit_button("Save Diaper"):
                     final_note = f"Diaper: {status} - {note}" if note else f"Diaper: {status}"
-                    save_log("Diaper", final_note)
+                    save_log("Diaper", final_note, diaper_status=status)
 
         elif action == "Note":
             with st.form("note_form", clear_on_submit=True):
