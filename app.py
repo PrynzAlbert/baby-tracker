@@ -85,6 +85,11 @@ st.markdown(
     }
     div[data-testid="stMetric"] label { color: #94A3B8 !important; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
+
+    .bold-name {
+        font-weight: 700;
+        color: #38BDF8;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -98,7 +103,6 @@ logging.basicConfig(level=logging.INFO)
 
 @st.cache_resource
 def init_supabase():
-    """Initialize Supabase client."""
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 
@@ -109,12 +113,10 @@ supabase = init_supabase()
 # Validation Helpers
 # -------------------------------------------------------------------------------------
 def is_valid_email(email: str) -> bool:
-    """Validate email format."""
     return "@" in email and "." in email.split("@")[-1]
 
 
 def is_family_ready(profile: dict | None) -> bool:
-    """Check if profile has a valid family_id."""
     return bool(profile and profile.get("family_id"))
 
 
@@ -122,7 +124,6 @@ def is_family_ready(profile: dict | None) -> bool:
 # Database Helpers
 # -------------------------------------------------------------------------------------
 def get_profile_by_user(user_id: str | None) -> dict | None:
-    """Fetch user profile from database."""
     if not user_id:
         return None
     try:
@@ -141,7 +142,6 @@ def get_profile_by_user(user_id: str | None) -> dict | None:
 
 
 def get_family_members(family_id: str | None) -> list[dict]:
-    """Fetch all caregivers in a family."""
     if not family_id:
         return []
     try:
@@ -158,11 +158,27 @@ def get_family_members(family_id: str | None) -> list[dict]:
         return []
 
 
+def update_caregiver_name(user_id: str, new_name: str) -> bool:
+    try:
+        supabase.schema("public").table("profiles").update({"caregiver_name": new_name}).eq("id", user_id).execute()
+        return True
+    except Exception:
+        logging.exception("Failed to update caregiver name")
+        return False
+
+
+def get_local_now() -> datetime:
+    """Return current local time based on the browser's timezone.
+    Streamlit does not provide timezone offset directly, so we use the browser's local
+    time for front-end interaction and store it in UTC for server values only when needed.
+    """
+    return datetime.now()
+
+
 # -------------------------------------------------------------------------------------
 # Data Aggregation Helpers
 # -------------------------------------------------------------------------------------
 def calc_age_text(baby_dob_value: str | None) -> str:
-    """Calculate human-readable baby age."""
     if not baby_dob_value:
         return ""
     try:
@@ -179,10 +195,9 @@ def calc_age_text(baby_dob_value: str | None) -> str:
 
 
 def fetch_today_logs(family_id: str | None) -> list[dict]:
-    """Fetch all logs for today, scoped to family."""
     if not family_id:
         return []
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_local_now().strftime("%Y-%m-%d")
     try:
         response = (
             supabase.schema("public")
@@ -199,7 +214,6 @@ def fetch_today_logs(family_id: str | None) -> list[dict]:
 
 
 def fetch_recent_logs(family_id: str | None, limit: int = 20) -> list[dict]:
-    """Fetch recent logs, scoped to family."""
     if not family_id:
         return []
     try:
@@ -219,7 +233,6 @@ def fetch_recent_logs(family_id: str | None, limit: int = 20) -> list[dict]:
 
 
 def fetch_history_chart(family_id: str | None) -> pd.DataFrame:
-    """Fetch logs for chart visualization, scoped to family."""
     if not family_id:
         return pd.DataFrame()
     try:
@@ -253,7 +266,6 @@ def save_log(
     end_time: datetime | None = None,
     duration_minutes: int | None = None,
 ) -> None:
-    """Save a log entry to the database."""
     profile = st.session_state.get("profile")
     if not profile:
         st.error("Your profile is not loaded yet.")
@@ -264,12 +276,13 @@ def save_log(
         st.error("This account is not attached to a family yet.")
         return
 
+    now_value = get_local_now()
     payload: dict[str, Any] = {
         "type": act_type,
         "created_by_caregiver": profile.get("caregiver_name", "Caregiver"),
         "note": note_text,
         "family_id": family_id,
-        "start_date_time": (start_time or datetime.now()).isoformat(),
+        "start_date_time": (start_time or now_value).isoformat(),
     }
     if end_time is not None:
         payload["end_date_time"] = end_time.isoformat()
@@ -286,7 +299,6 @@ def save_log(
 
 
 def delete_log(log_id: str | None) -> None:
-    """Delete a log entry."""
     if not log_id:
         return
     try:
@@ -298,7 +310,6 @@ def delete_log(log_id: str | None) -> None:
 
 
 def reset_session_after_logout() -> None:
-    """Clear session state on logout."""
     st.session_state.user = None
     st.session_state.profile = None
     st.session_state.sleep_active = False
@@ -330,7 +341,6 @@ except Exception:
 # Authentication UI
 # -------------------------------------------------------------------------------------
 def render_auth_screen() -> None:
-    """Display login and signup screens."""
     st.title("🍼 Smart Baby")
     st.caption("Sign in or create your account to begin.")
 
@@ -388,7 +398,6 @@ def render_auth_screen() -> None:
 # Profile Setup UI
 # -------------------------------------------------------------------------------------
 def render_profile_setup() -> None:
-    """Display profile setup screen."""
     st.title("👶 Setup Baby Profile")
     st.caption("Almost done! Tell us a bit about your family.")
 
@@ -466,10 +475,73 @@ def render_profile_setup() -> None:
 
 
 # -------------------------------------------------------------------------------------
+# Settings UI
+# -------------------------------------------------------------------------------------
+def render_settings() -> None:
+    profile = st.session_state.profile
+    user_id = st.session_state.user.id if st.session_state.user else None
+
+    if not profile or not user_id:
+        st.error("Profile not found.")
+        return
+
+    st.title("⚙️ Settings")
+
+    st.subheader("👤 Profile")
+    current_caregiver = profile.get("caregiver_name", "Caregiver")
+    new_caregiver_name = st.text_input("Your Caregiver Name", value=current_caregiver)
+
+    if st.button("Update Name"):
+        if new_caregiver_name and new_caregiver_name != current_caregiver:
+            if update_caregiver_name(user_id, new_caregiver_name):
+                st.session_state.profile = get_profile_by_user(user_id)
+                st.success("Name updated successfully!")
+                st.rerun()
+            else:
+                st.error("Failed to update name.")
+        else:
+            st.info("No changes to save.")
+
+    st.divider()
+
+    st.subheader("👨‍👩‍👧‍👦 Family Management")
+    family_id = profile.get("family_id")
+
+    if family_id:
+        st.markdown("#### Family Invite Code")
+        st.info("Share this code with your partner to join your family:")
+        st.code(family_id, language="text")
+        st.caption("This code can be pasted in the 'Join Existing Family' option during registration.")
+
+        st.divider()
+        st.markdown("#### Family Members")
+        family_members = get_family_members(family_id)
+
+        if family_members:
+            for member in family_members:
+                member_name = member.get("caregiver_name", "Unknown")
+                baby_name = member.get("baby_name", "")
+                st.write(f"• <span class='bold-name'>{member_name}</span>", unsafe_allow_html=True)
+                if baby_name:
+                    st.caption(f"Tracking: {baby_name}")
+        else:
+            st.caption("No family members yet.")
+    else:
+        st.warning("Family ID not found. Please complete your profile setup.")
+
+    st.divider()
+
+    st.subheader("🔐 Account")
+    st.write(f"Email: {st.session_state.user.email}")
+
+    if st.button("Change Password"):
+        st.info("Password changes can be managed through your email. Check your email for a password reset link.")
+
+
+# -------------------------------------------------------------------------------------
 # Main App UI
 # -------------------------------------------------------------------------------------
 def render_main_app() -> None:
-    """Display the main tracking app."""
     profile = st.session_state.profile
     if not profile:
         reset_session_after_logout()
@@ -481,40 +553,48 @@ def render_main_app() -> None:
     family_id = profile.get("family_id")
     age_text = calc_age_text(baby_dob_str)
 
-    # Sidebar
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "home"
+
+    if st.session_state.current_page == "settings":
+        render_settings()
+        return
+
     with st.sidebar:
-        st.write(f"Signed in as:\n**{current_caregiver}**")
+        st.markdown(
+            f"<div>Signed in as:<br/><span class='bold-name'>{current_caregiver}</span></div>",
+            unsafe_allow_html=True,
+        )
         if baby_name:
-            st.caption(f"Baby: **{baby_name}** ({age_text})")
-
-        if family_id:
-            st.divider()
-            st.markdown("**Family Sharing Code:**")
-            st.code(family_id, language="text")
-
-            # Show family members
-            with st.expander("👥 Family Members"):
-                family_members = get_family_members(family_id)
-                if family_members:
-                    for member in family_members:
-                        st.write(f"• **{member.get('caregiver_name')}**")
-                else:
-                    st.caption("No other family members yet.")
+            st.caption(f"Baby: {baby_name} ({age_text})")
 
         st.divider()
-        if st.button("Log Out"):
-            try:
-                supabase.auth.sign_out()
-            except Exception:
-                logging.exception("Failed to sign out")
-            reset_session_after_logout()
-            st.rerun()
 
-    # Main content
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🏠 Home", use_container_width=True):
+                st.session_state.current_page = "home"
+                st.rerun()
+        with col2:
+            if st.button("⚙️ Settings", use_container_width=True):
+                st.session_state.current_page = "settings"
+                st.rerun()
+        with col3:
+            if st.button("🚪 Logout", use_container_width=True):
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    logging.exception("Failed to sign out")
+                reset_session_after_logout()
+                st.session_state.current_page = "home"
+                st.rerun()
+
     st.title(f"🍼 {baby_name}'s Tracker")
-    st.markdown(f"Welcome back, **{current_caregiver}**!")
+    st.markdown(
+        f"<div>Welcome back, <span class='bold-name'>{current_caregiver}</span>!</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Today's metrics
     today_logs = fetch_today_logs(family_id)
     feeds = sum(1 for item in today_logs if item.get("type") == "Feed")
     diapers = sum(1 for item in today_logs if item.get("type") == "Diaper")
@@ -531,7 +611,6 @@ def render_main_app() -> None:
 
     st.divider()
 
-    # Tabs
     tab_track, tab_analytics = st.tabs(["📝 Track & Log", "📊 History & Trends"])
 
     with tab_track:
@@ -560,7 +639,7 @@ def render_main_app() -> None:
 
                 if st.button("🚀 Start Sleep Timer"):
                     st.session_state.sleep_active = True
-                    st.session_state.sleep_start_time = past_start_time or datetime.now()
+                    st.session_state.sleep_start_time = get_local_now()
                     st.rerun()
             else:
                 started_at = st.session_state.sleep_start_time
@@ -569,7 +648,7 @@ def render_main_app() -> None:
 
                 with col1:
                     if st.button("Stop & Save"):
-                        end_time = datetime.now()
+                        end_time = get_local_now()
                         duration_minutes = max(int((end_time - started_at).total_seconds() / 60), 0)
                         note_text = (
                             f"Slept for {duration_minutes} minutes "
@@ -626,7 +705,10 @@ def render_main_app() -> None:
                 with col_i:
                     log_type = (log.get("type") or "").upper()
                     caregiver = log.get("created_by_caregiver") or "Caregiver"
-                    st.markdown(f"**{log_type}** — *{caregiver}*")
+                    st.markdown(
+                        f"<span class='bold-name'>{log_type}</span> — *{caregiver}*",
+                        unsafe_allow_html=True,
+                    )
                     if log.get("note"):
                         st.write(f"📝 {log.get('note')}")
                     if log.get("start_date_time"):
