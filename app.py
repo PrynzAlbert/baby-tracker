@@ -540,6 +540,18 @@ def render_auth_screen() -> None:
 # -------------------------------------------------------------------------------------
 # Profile Setup UI
 # -------------------------------------------------------------------------------------
+# wipe leftover profile-setup widget keys once when entering this screen
+if "profile_setup_initialized" not in st.session_state:
+    for k in (
+        "setup_caregiver_name",
+        "setup_mode",
+        "setup_baby_name",
+        "setup_baby_dob",
+        "setup_family_code",
+    ):
+        st.session_state.pop(k, None)
+    st.session_state["profile_setup_initialized"] = True
+
 def render_profile_setup() -> None:
     """Display profile setup screen."""
     st.title("👶 Setup Baby Profile")
@@ -642,7 +654,8 @@ def render_profile_setup() -> None:
                     logger.exception("Profile setup failed: %s", str(e))
                     st.error("Profile creation failed. Please try again.")
 
-
+# after successful setup, remove the init flag so next time we start fresh
+st.session_state.pop("profile_setup_initialized", None)
 # -------------------------------------------------------------------------------------
 # Settings UI
 # -------------------------------------------------------------------------------------
