@@ -470,11 +470,26 @@ if "sleep_start_time" not in st.session_state:
 if "current_page" not in st.session_state:
     st.session_state.current_page = "tracker"
 
+# Session restore: only set user/profile if there's a real profile row
 try:
     session = supabase.auth.get_session()
-    if session and getattr(session, "user", None):
-        st.session_state.user = session.user
-        st.session_state.profile = get_profile_by_user(session.user.id)
+    logger.debug("Supabase session (raw): %s", session)
+    # support both object-like and dict-like return shapes
+    user = None
+    if session:
+        user = getattr(session, "user", None)
+        if user is None and isinstance(session, dict):
+            user = session.get("user") or (session.get("data") and session["data"].get("user"))
+    if user:
+        # only treat as a full signed-in session if we find a profile row
+        profile = get_profile_by_user(user.id)
+        if profile:
+            st.session_state.user = user
+            st.session_state.profile = profile
+        else:
+            logger.info("Supabase session for user %s found but no profile row; not restoring session.", getattr(user, "id", "<unknown>"))
+    else:
+        logger.debug("No supabase user session found on server-side restore.")
 except Exception as e:
     logger.exception("Failed to restore existing session: %s", str(e))
 
@@ -540,20 +555,20 @@ def render_auth_screen() -> None:
 # -------------------------------------------------------------------------------------
 # Profile Setup UI
 # -------------------------------------------------------------------------------------
-# wipe leftover profile-setup widget keys once when entering this screen
-if "profile_setup_initialized" not in st.session_state:
-    for k in (
-        "setup_caregiver_name",
-        "setup_mode",
-        "setup_baby_name",
-        "setup_baby_dob",
-        "setup_family_code",
-    ):
-        st.session_state.pop(k, None)
-    st.session_state["profile_setup_initialized"] = True
-
 def render_profile_setup() -> None:
     """Display profile setup screen."""
+    # wipe leftover profile-setup widget keys once when entering this screen
+    if "profile_setup_initialized" not in st.session_state:
+        for k in (
+            "setup_caregiver_name",
+            "setup_mode",
+            "setup_baby_name",
+            "setup_baby_dob",
+            "setup_family_code",
+        ):
+            st.session_state.pop(k, None)
+        st.session_state["profile_setup_initialized"] = True
+
     st.title("👶 Setup Baby Profile")
     st.caption("Almost done! Tell us a bit about your family.")
 
@@ -609,6 +624,8 @@ def render_profile_setup() -> None:
                     existing_profile = get_profile_by_user(user_id)
                     if existing_profile and existing_profile.get("family_id"):
                         st.session_state.profile = existing_profile
+                        # cleanup init flag and rerun
+                        st.session_state.pop("profile_setup_initialized", None)
                         st.rerun()
 
                     if setup_mode == "Join Existing Family (Partner Code)":
@@ -648,14 +665,15 @@ def render_profile_setup() -> None:
                         supabase.schema("public").table("profiles").insert(profile_data).execute()
 
                     st.session_state.profile = get_profile_by_user(user_id)
+                    # cleanup init flag so next visit starts fresh
+                    st.session_state.pop("profile_setup_initialized", None)
                     st.success("Profile setup complete! Your baby tracker is ready.")
                     st.rerun()
                 except Exception as e:
                     logger.exception("Profile setup failed: %s", str(e))
                     st.error("Profile creation failed. Please try again.")
 
-# after successful setup, remove the init flag so next time we start fresh
-st.session_state.pop("profile_setup_initialized", None)
+
 # -------------------------------------------------------------------------------------
 # Settings UI
 # -------------------------------------------------------------------------------------
