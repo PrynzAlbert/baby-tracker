@@ -546,27 +546,40 @@ def render_profile_setup() -> None:
     st.caption("Almost done! Tell us a bit about your family.")
 
     with st.form("profile_setup_form"):
-        caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Audra...")
+        caregiver_name = st.text_input("Your Caregiver Username", placeholder="e.g. Albert, Audra...", key="setup_caregiver_name")
         setup_mode = st.radio(
             "Family Setup",
-            ["Create New Baby Profile", "Join Existing Family (Partner Code)"]
+            ["Create New Baby Profile", "Join Existing Family (Partner Code)"],
+            key="setup_mode"
         )
 
+        # Prepare defaults; actual widgets created only for the chosen mode
         baby_name = ""
         baby_dob = datetime.now().date()
         family_code = ""
 
         if setup_mode == "Create New Baby Profile":
-            baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo")
-            baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date())
+            # Unique keys so Streamlit doesn't mix widgets between modes
+            baby_name = st.text_input("Baby's Name", placeholder="e.g. Leo", key="setup_baby_name")
+            baby_dob = st.date_input("Baby's Date of Birth", datetime.now().date(), key="setup_baby_dob")
         else:
             family_code = st.text_input(
                 "Family Invite Code",
                 placeholder="Paste partner's family code here...",
                 help="Use the 8-character code exactly as shared. This is case-insensitive.",
+                key="setup_family_code",
             )
 
         if st.form_submit_button("Complete Setup"):
+            # Read values from session_state to ensure we get the widget values by key
+            caregiver_name = (st.session_state.get("setup_caregiver_name") or "").strip()
+            setup_mode = st.session_state.get("setup_mode")
+            if setup_mode == "Create New Baby Profile":
+                baby_name = st.session_state.get("setup_baby_name", "")
+                baby_dob = st.session_state.get("setup_baby_dob", datetime.now().date())
+            else:
+                family_code = st.session_state.get("setup_family_code", "")
+
             if not caregiver_name:
                 st.error("Please enter your caregiver username.")
             elif setup_mode == "Create New Baby Profile" and not baby_name:
