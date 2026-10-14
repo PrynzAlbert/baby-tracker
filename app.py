@@ -223,6 +223,13 @@ def is_family_ready(profile: dict | None) -> bool:
     return bool(profile and profile.get("family_id"))
 
 
+def normalize_family_code(family_code: str | None) -> str:
+    """Normalize a family invite code so matching is reliable."""
+    if family_code is None:
+        return ""
+    return family_code.strip().upper()
+
+
 # -------------------------------------------------------------------------------------
 # Database Helpers
 # -------------------------------------------------------------------------------------
@@ -261,6 +268,28 @@ def get_family_members(family_id: str | None) -> list[dict]:
     except Exception as e:
         logger.exception("Failed to fetch family members for %s: %s", family_id, str(e))
         return []
+
+
+def find_family_by_code(family_code: str | None) -> dict | None:
+    """Fetch the family profile row matching the invite code."""
+    normalized_code = normalize_family_code(family_code)
+    if not normalized_code:
+        return None
+
+    try:
+        response = (
+            supabase.schema("public")
+            .table("profiles")
+            .select("family_id, baby_name, baby_dob")
+            .eq("family_id", normalized_code)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.exception("Failed to lookup family by code %s: %s", normalized_code, str(e))
+        return None
 
 
 # -------------------------------------------------------------------------------------
@@ -372,7 +401,6 @@ def save_log(
         st.error("This account is not attached to a family yet.")
         return
 
-    # Build payload with only non-None values
     payload: dict[str, Any] = {
         "type": act_type,
         "created_by_caregiver": profile.get("caregiver_name", "Caregiver"),
@@ -381,8 +409,7 @@ def save_log(
         "start_date_time": (start_time or datetime.now()).isoformat(),
         "source_app": "smart_baby",
     }
-    
-    # Add optional fields only if provided
+
     if end_time is not None:
         payload["end_date_time"] = end_time.isoformat()
     if duration_minutes is not None:
@@ -396,7 +423,7 @@ def save_log(
 
     logger.info("Attempting to save log: %s for family %s", act_type, family_id)
     logger.debug("Payload: %s", payload)
-    
+
     try:
         result = supabase.schema("public").table("baby_logs").insert(payload).execute()
         logger.info("Log saved successfully: %s", result.data)
@@ -535,7 +562,8 @@ def render_profile_setup() -> None:
         else:
             family_code = st.text_input(
                 "Family Invite Code",
-                placeholder="Paste partner's family code here..."
+                placeholder="Paste partner's family code here...",
+                help="Use the 8-character code exactly as shared. This is case-insensitive.",
             )
 
         if st.form_submit_button("Complete Setup"):
@@ -551,24 +579,33 @@ def render_profile_setup() -> None:
                     assigned_family_id = None
                     final_baby_name = baby_name
                     final_baby_dob = str(baby_dob)
+                    caregiver_name = caregiver_name.strip()
+
+                    existing_profile = get_profile_by_user(user_id)
+                    if existing_profile and existing_profile.get("family_id"):
+                        st.session_state.profile = existing_profile
+                        st.rerun()
 
                     if setup_mode == "Join Existing Family (Partner Code)":
-                        match_res = (
-                            supabase.schema("public")
-                            .table("profiles")
-                            .select("family_id, baby_name, baby_dob")
-                            .eq("family_id", family_code)
-                            .limit(1)
-                            .execute()
-                        )
-                        if not match_res.data:
-                            st.error("Invalid family invite code. Please check with your partner.")
+                        normalized_family_code = normalize_family_code(family_code)
+                        matched_family = find_family_by_code(normalized_family_code)
+                        if not matched_family:
+                            st.error(
+                                "That family code was not found. Please paste the exact invite code from your partner and try again."
+                            )
                             st.stop()
-                        assigned_family_id = match_res.data[0]["family_id"]
-                        final_baby_name = match_res.data[0]["baby_name"]
-                        final_baby_dob = match_res.data[0]["baby_dob"]
+
+                        assigned_family_id = matched_family.get("family_id")
+                        if matched_family.get("baby_name"):
+                            final_baby_name = matched_family["baby_name"]
+                        if matched_family.get("baby_dob"):
+                            final_baby_dob = str(matched_family["baby_dob"])
                     else:
                         assigned_family_id = uuid4().hex[:8].upper()
+
+                    if existing_profile and existing_profile.get("family_id") and existing_profile.get("family_id") != assigned_family_id:
+                        st.error("This account is already linked to a different family. Please use the code for that family or create a new profile.")
+                        st.stop()
 
                     profile_data = {
                         "id": user_id,
@@ -578,13 +615,15 @@ def render_profile_setup() -> None:
                         "family_id": assigned_family_id,
                     }
 
-                    existing_profile = get_profile_by_user(user_id)
                     if existing_profile:
-                        supabase.schema("public").table("profiles").update(profile_data).eq("id", user_id).execute()
+                        update_data = {key: value for key, value in profile_data.items() if existing_profile.get(key) != value}
+                        if update_data:
+                            supabase.schema("public").table("profiles").update(update_data).eq("id", user_id).execute()
                     else:
                         supabase.schema("public").table("profiles").insert(profile_data).execute()
 
                     st.session_state.profile = get_profile_by_user(user_id)
+                    st.success("Profile setup complete! Your baby tracker is ready.")
                     st.rerun()
                 except Exception as e:
                     logger.exception("Profile setup failed: %s", str(e))
